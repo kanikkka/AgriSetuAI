@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-import time
+import os
+import google.generativeai as genai
 
 router = APIRouter()
 
@@ -11,29 +12,42 @@ class ChatRequest(BaseModel):
 
 @router.post("/chat")
 async def chat_with_copilot(req: ChatRequest):
-    time.sleep(0.6) # realistic AI inference delay
-    q = req.query.lower()
+    api_key = os.getenv("GEMINI_API_KEY", "")
     
-    # Context-Aware Agricultural Advisory Engine
-    if any(w in q for w in ["hold", "sell", "wait", "rate", "bhav", "daam", "price"]):
-        reply = f"Based on current APMC arrival momentum in Punjab/Haryana, holding {req.crop} for 4-5 days is recommended. Anticipated price surge is +₹45 to +₹70/Qtl as regional procurement demand peaks."
-        intent = "HOLD_SELL_ADVISORY"
-    elif any(w in q for w in ["moisture", "nami", "quality", "grading", "fci"]):
-        reply = "Maintain moisture strictly below 12.0% for FCI Grade-A qualification. If grain sample is between 12.5%-13.5%, spread in direct sun for 2 hours before mandi gate entry to avoid a ₹25-40/Qtl dockage penalty."
-        intent = "QUALITY_ADVISORY"
-    elif any(w in q for w in ["weather", "rain", "barish", "mausam"]):
-        reply = "Clear weather expected over Khanna & Karnal belt for the next 72 hours. Optimal window for open yard loading and direct inter-district truck transport."
-        intent = "WEATHER_ADVISORY"
-    elif any(w in q for w in ["arbitrage", "transport", "mandi", "karnal", "khanna"]):
-        reply = "Karnal APMC is offering ₹2,475/Qtl vs Khanna's ₹2,440/Qtl. After deducting ₹25/Qtl net diesel cost, route arbitrage yields +₹140/Qtl extra profit for batches over 100 Quintals."
-        intent = "ARBITRAGE_CALCULATION"
-    else:
-        reply = f"AgriSetu AI analysis for {req.crop}: Spot liquidity is strong across major mandis. You can check the Quality Inspector for instant dockage-free certification or pool with nearby farmers in Coalitions for corporate bulk rates."
-        intent = "GENERAL_ADVISORY"
+    if not api_key:
+        return {
+            "status": "error",
+            "reply": "API Key configure nahi hai. Kripya GEMINI_API_KEY environment variable set karein."
+        }
 
-    return {
-        "status": "success",
-        "intent": intent,
-        "reply": reply,
-        "confidence": 0.94
-    }
+    try:
+        genai.configure(api_key=api_key)
+        
+        system_prompt = """
+        You are AgriSetu AI, an expert agricultural economist and agronomist for Indian farmers.
+        - Give direct, highly accurate, and practical farming/market advisory.
+        - Answer in the user's language (Hinglish/Hindi/Punjabi/English).
+        - Cover Mandi rates, FCI norms, pest control, crop management, and price forecasting.
+        - Keep answers crisp, respectful, and limited to 2-4 sentences.
+        """
+        
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=system_prompt
+        )
+        
+        response = model.generate_content(
+            f"Fasla: {req.crop}\nBhasha: {req.language}\nKisan ka sawal: {req.query}"
+        )
+        
+        return {
+            "status": "success",
+            "mode": "live_gemini_llm",
+            "reply": response.text.strip(),
+            "confidence": 0.99
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "reply": f"AI Engine connect karne mein error aaya: {str(e)}"
+        }
