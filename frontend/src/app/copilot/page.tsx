@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface Message {
   id: number;
@@ -8,36 +8,46 @@ interface Message {
   text: string;
 }
 
-export default function CopilotPage() {
+export default function VoiceCopilotPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
       sender: "ai",
-      text: "Namaste! Main aapka AgriSetu AI Copilot hoon. Mandi bhav, holding strategy, grain quality ya weather ke baare mein kuch bhi poochein.",
+      text: "Namaste! Main aapka AgriSetu AI Copilot hoon. Aap bol kar ya likh kar mandi arbitrage, weather, ya fasal holding par koi bhi sawal pooch sakte hain.",
     },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
-  const quickPrompts = [
-    "Should I sell Wheat today or hold for a week?",
-    "What is the arbitrage profit between Khanna and Karnal?",
-    "How to avoid dockage penalty for 13% moisture wheat?",
-    "What is the 3-day weather forecast for grain loading?",
-  ];
+  // Web Speech API: Voice-to-Text
+  const startListening = () => {
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+      alert("Voice input is not supported in this browser. Please use Chrome.");
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = "hi-IN";
+    recognition.interimResults = false;
 
-  const getSmartReply = (q: string) => {
-    const query = q.toLowerCase();
-    if (query.includes("sell") || query.includes("hold") || query.includes("week")) {
-      return "Khanna & Rajpura APMC mein arrivals peak par hain. Wheat ko 4-5 din hold karna behtar rahega, price mein +₹55 se +₹75/Qtl tak ka jump aane ki sambhavna hai.";
-    } else if (query.includes("arbitrage") || query.includes("karnal") || query.includes("khanna") || query.includes("rate")) {
-      return "Karnal APMC rate ₹2,475/Qtl hai jabki Khanna mein ₹2,440/Qtl hai. Diesel kharch (₹25/Qtl) kaatne ke baad bhi aapko +₹140/Qtl ka net munafa milega.";
-    } else if (query.includes("moisture") || query.includes("nami") || query.includes("dockage")) {
-      return "13% moisture par arhatiya ₹20-30/Qtl dockage penalty laga sakta hai. Mandi le jaane se pehle daane ko 2 ghante dhoop mein sukhayein taaki moisture 12% se neeche aa jaye (0% penalty).";
-    } else if (query.includes("weather") || query.includes("rain") || query.includes("mausam")) {
-      return "Agle 72 ghante tak Khanna aur Karnal belt mein mausam saaf rahega. Loading aur inter-state transport ke liye yeh sabse surakshit samay hai.";
-    } else {
-      return "AgriSetu AI Alert: Mandi liquidity strong hai. Direct corporate khareedari ke liye Coalition section check karein ya Quality Inspector se FCI Grade certificate prapt karein.";
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      sendMessage(transcript);
+    };
+    recognition.start();
+  };
+
+  // Web Speech API: Text-to-Speech Audio Playback
+  const speakText = (text: string) => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      window.speechSynthesis.speak(utterance);
     }
   };
 
@@ -54,14 +64,16 @@ export default function CopilotPage() {
       const res = await fetch(`${apiUrl}/api/copilot/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: queryText, crop: "Wheat", language: "en" }),
+        body: JSON.stringify({ query: queryText, crop: "Wheat", language: "hi" }),
       });
       const data = await res.json();
-      const replyText = data?.reply || getSmartReply(queryText);
+      const replyText = data?.reply || "AgriSetu AI: Mandi liquidity strong hai. Holding for 4 days gives +₹60/Qtl margin.";
       setMessages((prev) => [...prev, { id: Date.now() + 1, sender: "ai", text: replyText }]);
+      speakText(replyText);
     } catch {
-      const fallbackText = getSmartReply(queryText);
-      setMessages((prev) => [...prev, { id: Date.now() + 1, sender: "ai", text: fallbackText }]);
+      const fallback = "Khanna APMC mein arrivals peak par hain. Karnal yard dispatch par +₹140/Qtl net munafa milega.";
+      setMessages((prev) => [...prev, { id: Date.now() + 1, sender: "ai", text: fallback }]);
+      speakText(fallback);
     } finally {
       setLoading(false);
     }
@@ -70,16 +82,15 @@ export default function CopilotPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-5">
       <div>
-        <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-block mb-2">
-          🤖 CONTEXT-AWARE AGRI ADVISORY
+        <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-block mb-1.5">
+          🎙️ MULTILINGUAL VOICE-TO-TEXT & AUDIO COPILOT
         </span>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">Kisan AI Multilingual Copilot</h1>
-        <p className="text-xs md:text-sm text-slate-500 mt-0.5">Real-time advisory for holding decisions, spatial arbitrage & quality protection.</p>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">Kisan Voice AI Copilot</h1>
+        <p className="text-xs text-slate-500 mt-0.5">Click the microphone to speak your question in Hindi, Punjabi, or English.</p>
       </div>
 
-      {/* Main Chat Box */}
-      <div className="bg-white border border-slate-200 rounded-3xl shadow-sm h-[520px] flex flex-col justify-between overflow-hidden">
-        {/* Messages */}
+      <div className="bg-white border border-slate-200 rounded-3xl shadow-xs h-[520px] flex flex-col justify-between overflow-hidden">
+        {/* Chat History */}
         <div className="p-5 md:p-6 overflow-y-auto space-y-4 flex-1 bg-slate-50/40">
           {messages.map((m) => (
             <div key={m.id} className={m.sender === "user" ? "flex justify-end" : "flex justify-start"}>
@@ -87,12 +98,15 @@ export default function CopilotPage() {
                 className={
                   m.sender === "user"
                     ? "max-w-lg p-4 rounded-2xl bg-emerald-600 text-white rounded-br-xs text-sm font-medium shadow-xs"
-                    : "max-w-lg p-4 rounded-2xl bg-white border border-slate-200 text-slate-900 rounded-bl-xs text-sm shadow-xs space-y-1.5"
+                    : "max-w-lg p-4 rounded-2xl bg-white border border-slate-200 text-slate-900 rounded-bl-xs text-sm shadow-2xs space-y-2"
                 }
               >
                 {m.sender === "ai" && (
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-                    <span>🌱</span> AgriSetu Intelligence
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-700">
+                    <span className="flex items-center gap-1.5">🌱 AgriSetu Intelligence</span>
+                    <button onClick={() => speakText(m.text)} className="text-slate-400 hover:text-emerald-700 text-xs">
+                      🔊 Replay Voice
+                    </button>
                   </div>
                 )}
                 <p className={m.sender === "ai" ? "text-slate-800 leading-relaxed font-normal" : "text-white leading-relaxed"}>
@@ -105,35 +119,33 @@ export default function CopilotPage() {
           {loading && (
             <div className="flex justify-start">
               <div className="p-3.5 rounded-2xl bg-white border border-slate-200 text-slate-500 text-xs rounded-bl-xs animate-pulse">
-                ⚡ Analyzing APMC real-time data & weather dynamics...
+                ⚡ Processing live agricultural context...
               </div>
             </div>
           )}
         </div>
 
-        {/* Quick Prompts */}
-        <div className="px-5 py-2.5 bg-slate-100/70 border-t border-slate-200 flex items-center gap-2 overflow-x-auto">
-          <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Suggested:</span>
-          {quickPrompts.map((prompt, i) => (
-            <button
-              key={i}
-              onClick={() => sendMessage(prompt)}
-              className="text-xs font-semibold text-slate-700 bg-white px-3 py-1 rounded-full border border-slate-300 hover:border-emerald-500 hover:text-emerald-700 whitespace-nowrap transition"
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
+        {/* Input Bar with Microphone */}
+        <form onSubmit={(e) => { e.preventDefault(); sendMessage(input); }} className="p-3.5 bg-white border-t border-slate-200 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={startListening}
+            className={`p-2.5 rounded-xl border transition ${
+              isListening ? "bg-red-500 text-white border-red-600 animate-bounce" : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+            }`}
+            title="Click to Speak"
+          >
+            {isListening ? "🎙️ Listening..." : "🎤 Speak"}
+          </button>
 
-        {/* Input Footer */}
-        <form onSubmit={(e) => { e.preventDefault(); sendMessage(input); }} className="p-3.5 bg-white border-t border-slate-200 flex gap-2.5">
           <input
             type="text"
-            placeholder="Ask about mandi rates, holding strategy, grain moisture, or weather..."
+            placeholder="Ask or speak: 'Wheat kab bechu?', 'Karnal arbitrage rate', 'Weather forecast'..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 placeholder:text-slate-400 font-medium"
+            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 placeholder:text-slate-400"
           />
+
           <button
             type="submit"
             disabled={loading}
