@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.mandi import router as mandi_router
+from app.api.quality import router as quality_router
 
 app = FastAPI(title="AgriSetu AI Backend Engine")
 
@@ -13,6 +14,7 @@ app.add_middleware(
 )
 
 app.include_router(mandi_router, prefix="/api/mandi", tags=["Mandi"])
+app.include_router(quality_router, prefix="/api/quality", tags=["Quality"])
 
 @app.get("/")
 def read_root():
