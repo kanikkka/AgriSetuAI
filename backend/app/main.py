@@ -1,12 +1,8 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import intelligence, mandi
+from app.api.mandi import router as mandi_router
 
-app = FastAPI(
-    title="KisanLogic AI Backend Engine",
-    description="Realtime Agricultural Decision & NASA Intelligence API",
-    version="2.0.0"
-)
+app = FastAPI(title="AgriSetu AI Backend Engine")
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,14 +12,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Attach Routers
-app.include_router(intelligence.router, prefix="/api/intelligence", tags=["Intelligence"])
-app.include_router(mandi.router, prefix="/api", tags=["Mandi Prices"])
+app.include_router(mandi_router, prefix="/api/mandi", tags=["Mandi"])
 
 @app.get("/")
-def root():
-    return {
-        "status": "online",
-        "service": "KisanLogic AI Realtime Backend Engine",
-        "version": "2.0.0"
-    }
+def read_root():
+    return {"status": "online", "engine": "AgriSetu AI Kisan v2.0"}
