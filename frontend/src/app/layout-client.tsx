@@ -17,8 +17,8 @@ function MainNavigation({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900 selection:bg-emerald-100 selection:text-emerald-900">
-      {/* Sleek Primary Sidebar */}
+    <div className="flex min-h-screen bg-slate-50">
+      {/* Left Sidebar */}
       <aside className="w-64 bg-slate-950 text-slate-100 flex flex-col justify-between p-6 min-h-screen sticky top-0 hidden md:flex z-30 flex-shrink-0 border-r border-slate-800">
         <div className="space-y-8">
           <Link href="/market" className="flex items-center gap-3 px-1">
@@ -60,9 +60,9 @@ function MainNavigation({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main Content Viewport */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 md:px-8 sticky top-0 z-20">
+      {/* Main View Area */}
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-50">
+        <header className="h-16 bg-white/95 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 md:px-8 sticky top-0 z-20">
           <div className="flex items-center gap-3">
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-emerald-500"></span> Live Mandi Grid Active
@@ -81,7 +81,7 @@ function MainNavigation({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="p-5 md:p-8 flex-1 overflow-y-auto">
+        <main className="p-6 md:p-8 flex-1 bg-slate-50">
           {children}
         </main>
       </div>
