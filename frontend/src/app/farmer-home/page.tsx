@@ -1,3 +1,4 @@
+import LiveSystemsFeed from @/components/LiveSystemsFeed;
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -108,7 +109,7 @@ export default function FarmerHomeLivePage() {
       <div className="bg-gradient-to-r from-emerald-800 to-teal-900 text-white p-6 rounded-3xl shadow-md flex justify-between items-center">
         <div>
           <span className="bg-emerald-700/60 text-emerald-200 text-xs font-bold px-3 py-1 rounded-full border border-emerald-600">
-            🌾 {t("app_title")} • 100% Production Ready
+            ðŸŒ¾ {t("app_title")} â€¢ 100% Production Ready
           </span>
           <h1 className="text-2xl md:text-3xl font-black mt-2">
             {t("sell_title")}
@@ -129,18 +130,18 @@ export default function FarmerHomeLivePage() {
       {/* Live Buyer Modal / Onboarding */}
       {showBuyerModal && (
         <div className="bg-slate-900 text-white p-5 rounded-3xl border border-slate-700 space-y-3">
-          <h3 className="text-sm font-black text-amber-400">🏢 Live Buyer Registration & Reverse Bidding</h3>
+          <h3 className="text-sm font-black text-amber-400">ðŸ¢ Live Buyer Registration & Reverse Bidding</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input
               type="text"
-              placeholder="Corporate Buyer Name (e.g. Nestlé India)"
+              placeholder="Corporate Buyer Name (e.g. NestlÃ© India)"
               value={newBuyerName}
               onChange={(e) => setNewBuyerName(e.target.value)}
               className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
             />
             <input
               type="number"
-              placeholder="Offered Bid Rate (₹/Quintal)"
+              placeholder="Offered Bid Rate (â‚¹/Quintal)"
               value={newBuyerRate}
               onChange={(e) => setNewBuyerRate(Number(e.target.value))}
               className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
@@ -160,22 +161,22 @@ export default function FarmerHomeLivePage() {
         <div className="bg-slate-900 text-white px-5 py-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs border border-slate-800">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span>🌤️ Khanna Hyperlocal: <strong>{weather.temperature_c}°C</strong></span>
-            <span>• Humidity: <strong>{weather.relative_humidity_pct}%</strong></span>
+            <span>ðŸŒ¤ï¸ Khanna Hyperlocal: <strong>{weather.temperature_c}Â°C</strong></span>
+            <span>â€¢ Humidity: <strong>{weather.relative_humidity_pct}%</strong></span>
           </div>
           <div className="text-emerald-400 font-bold">
-            🛡️ Moisture Risk: {weather.moisture_risk_level} (3-Day Rain Prob: {weather.max_rain_probability_3d_pct}%)
+            ðŸ›¡ï¸ Moisture Risk: {weather.moisture_risk_level} (3-Day Rain Prob: {weather.max_rain_probability_3d_pct}%)
           </div>
         </div>
       )}
 
       {/* Real Voice Assistant Engine */}
-      <VoiceAssistant />
+      <LiveSystemsFeed />`n`n      <VoiceAssistant />
 
       {/* 1. Harvest Input Details */}
       <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-3">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
-          <span>🌾</span>
+          <span>ðŸŒ¾</span>
           <span>{t("my_crop")}</span>
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -215,7 +216,7 @@ export default function FarmerHomeLivePage() {
       {/* 2. Real Buyers Match */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
         <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
-          <span>🤝</span>
+          <span>ðŸ¤</span>
           <span>{t("ready_buyers")} ({matches.length})</span>
         </h2>
 
@@ -238,14 +239,14 @@ export default function FarmerHomeLivePage() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 mt-1">
-                    📍 {b.location} • <strong>{b.distance_km} km away</strong> ({b.drive_time})
+                    ðŸ“ {b.location} â€¢ <strong>{b.distance_km} km away</strong> ({b.drive_time})
                   </p>
                 </div>
 
                 <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
                   <div className="text-right">
                     <span className="text-[10px] text-slate-400 font-bold block uppercase">{t("price_label")}</span>
-                    <span className="text-2xl font-black text-emerald-700">₹{b.offered_price}</span>
+                    <span className="text-2xl font-black text-emerald-700">â‚¹{b.offered_price}</span>
                     <span className="text-[10px] text-slate-500 block">/ Quintal</span>
                   </div>
                   <button
@@ -264,20 +265,20 @@ export default function FarmerHomeLivePage() {
       {/* 3. Confirmed Bookings */}
       {bookings.length > 0 && (
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-3">
-          <h2 className="text-base font-black text-slate-900">📑 {t("my_bookings")}</h2>
+          <h2 className="text-base font-black text-slate-900">ðŸ“‘ {t("my_bookings")}</h2>
           <div className="space-y-2">
             {bookings.map((bk, i) => (
               <div key={i} className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
                 <div>
                   <span className="text-[10px] font-bold text-emerald-800 bg-emerald-200 px-2 py-0.5 rounded">
-                    {bk.id} • {bk.status}
+                    {bk.id} â€¢ {bk.status}
                   </span>
                   <h4 className="font-extrabold text-slate-900 text-sm mt-1">{bk.buyer_name}</h4>
-                  <p className="text-xs text-slate-600">{bk.quantity_qtl} Qtl @ ₹{bk.agreed_price_per_qtl}/Qtl • {bk.delivery_location}</p>
+                  <p className="text-xs text-slate-600">{bk.quantity_qtl} Qtl @ â‚¹{bk.agreed_price_per_qtl}/Qtl â€¢ {bk.delivery_location}</p>
                 </div>
                 <div className="text-right">
                   <span className="text-xs text-slate-500 block">Gross Value</span>
-                  <span className="text-base font-black text-slate-900">₹{(bk.quantity_qtl * bk.agreed_price_per_qtl).toLocaleString("en-IN")}</span>
+                  <span className="text-base font-black text-slate-900">â‚¹{(bk.quantity_qtl * bk.agreed_price_per_qtl).toLocaleString("en-IN")}</span>
                 </div>
               </div>
             ))}

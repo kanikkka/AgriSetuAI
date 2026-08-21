@@ -1,3 +1,4 @@
+from app.services.live_integrations import fetch_live_nasa_firms_fires, fetch_live_agmarknet_stream, create_payment_order, dispatch_cellular_ivr_call, dispatch_corporate_erp_webhook
 from fastapi import APIRouter, HTTPException, Body
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
@@ -129,7 +130,7 @@ def register_buyer_live(payload: Dict[str, Any] = Body(...)):
     ))
     conn.commit()
     conn.close()
-    return {"status": "success", "buyer_id": b_id, "message": f"Buyer {payload.get('name')} registered with live quote ₹{payload.get('offered_price_per_qtl')}/Qtl!"}
+    return {"status": "success", "buyer_id": b_id, "message": f"Buyer {payload.get('name')} registered with live quote â‚¹{payload.get('offered_price_per_qtl')}/Qtl!"}
 
 @router.get("/buyer-matches")
 def get_buyer_matches(
@@ -207,7 +208,7 @@ def create_sale_booking(payload: Dict[str, Any] = Body(...)):
         str(uuid.uuid4()),
         payload.get("farmer_id", "F-GURPREET-01"),
         "Pre-Sale Request Dispatched",
-        f"Pre-sale contract for {payload['quantity_qtl']} Qtl {payload['crop']} confirmed with {buyer_name} at ₹{payload['offered_price']}/Qtl."
+        f"Pre-sale contract for {payload['quantity_qtl']} Qtl {payload['crop']} confirmed with {buyer_name} at â‚¹{payload['offered_price']}/Qtl."
     ))
 
     conn.commit()
@@ -294,13 +295,13 @@ def process_farmer_voice_query(payload: Dict[str, Any] = Body(...)):
 
     if "buyer" in query or "kaun" in query or "bhav" in query or "rate" in query or "kharid" in query or "mandi" in query:
         if lang == "pa":
-            speech = f"ਤੁਹਾਡੇ ਲਈ ਸਭ ਤੋਂ ਵਧੀਆ ਗਾਹਕ {b_name} ਹੈ, ਜੋ ₹{b_price} ਪ੍ਰਤੀ ਕੁਇੰਟਲ ਦਾ ਰੇਟ ਦੇ ਰਹੇ ਹਨ।"
+            speech = f"à¨¤à©à¨¹à¨¾à¨¡à©‡ à¨²à¨ˆ à¨¸à¨­ à¨¤à©‹à¨‚ à¨µà¨§à©€à¨† à¨—à¨¾à¨¹à¨• {b_name} à¨¹à©ˆ, à¨œà©‹ â‚¹{b_price} à¨ªà©à¨°à¨¤à©€ à¨•à©à¨‡à©°à¨Ÿà¨² à¨¦à¨¾ à¨°à©‡à¨Ÿ à¨¦à©‡ à¨°à¨¹à©‡ à¨¹à¨¨à¥¤"
         elif lang == "hi":
-            speech = f"आपके लिए सबसे बेहतर खरीदार {b_name} हैं, जो ₹{b_price} प्रति क्विंटल का रेट दे रहे हैं।"
+            speech = f"à¤†à¤ªà¤•à¥‡ à¤²à¤¿à¤ à¤¸à¤¬à¤¸à¥‡ à¤¬à¥‡à¤¹à¤¤à¤° à¤–à¤°à¥€à¤¦à¤¾à¤° {b_name} à¤¹à¥ˆà¤‚, à¤œà¥‹ â‚¹{b_price} à¤ªà¥à¤°à¤¤à¤¿ à¤•à¥à¤µà¤¿à¤‚à¤Ÿà¤² à¤•à¤¾ à¤°à¥‡à¤Ÿ à¤¦à¥‡ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚à¥¤"
         else:
-            speech = f"Your best available buyer offer is ₹{b_price} per quintal from {b_name} located at {b_loc}."
+            speech = f"Your best available buyer offer is â‚¹{b_price} per quintal from {b_name} located at {b_loc}."
     else:
-        speech = f"AgriSetu live update: Basmati peak confirmed buyer rate is ₹{b_price} per quintal."
+        speech = f"AgriSetu live update: Basmati peak confirmed buyer rate is â‚¹{b_price} per quintal."
 
     return {
         "status": "success",
@@ -308,3 +309,28 @@ def process_farmer_voice_query(payload: Dict[str, Any] = Body(...)):
         "input_query": query,
         "spoken_response": speech
     }
+@router.get("/nasa-firms-live")
+def get_nasa_fires():
+    return fetch_live_nasa_firms_fires()
+
+@router.get("/agmarknet-live-stream")
+def get_agmarknet_stream(crop: str = "Wheat", state: str = "Punjab"):
+    return fetch_live_agmarknet_stream(crop, state)
+
+@router.post("/initiate-payment")
+def init_payment(payload: Dict[str, Any] = Body(...)):
+    booking_id = payload.get("booking_id", "BK-TEST")
+    amount = float(payload.get("amount", 10000.0))
+    return create_payment_order(booking_id, amount)
+
+@router.post("/trigger-gsm-call")
+def trigger_gsm(payload: Dict[str, Any] = Body(...)):
+    phone = payload.get("phone", "+919876543210")
+    msg = payload.get("message", "AgriSetu Mandi Rate Update")
+    lang = payload.get("lang", "hi")
+    return dispatch_cellular_ivr_call(phone, msg, lang)
+
+@router.post("/dispatch-erp")
+def trigger_erp(payload: Dict[str, Any] = Body(...)):
+    b_id = payload.get("buyer_id", "B01")
+    return dispatch_corporate_erp_webhook(b_id, payload)
