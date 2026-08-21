@@ -1,3 +1,5 @@
+from app.services.ai_forecaster import run_14day_pytorch_forecast
+from app.services.grain_cv_scanner import scan_grain_image_cv
 from app.services.live_integrations import fetch_live_nasa_firms_fires, fetch_live_agmarknet_stream, create_payment_order, dispatch_cellular_ivr_call, dispatch_corporate_erp_webhook
 from fastapi import APIRouter, HTTPException, Body
 from typing import Optional, List, Dict, Any
@@ -130,7 +132,7 @@ def register_buyer_live(payload: Dict[str, Any] = Body(...)):
     ))
     conn.commit()
     conn.close()
-    return {"status": "success", "buyer_id": b_id, "message": f"Buyer {payload.get('name')} registered with live quote â‚¹{payload.get('offered_price_per_qtl')}/Qtl!"}
+    return {"status": "success", "buyer_id": b_id, "message": f"Buyer {payload.get('name')} registered with live quote Ã¢â€šÂ¹{payload.get('offered_price_per_qtl')}/Qtl!"}
 
 @router.get("/buyer-matches")
 def get_buyer_matches(
@@ -208,7 +210,7 @@ def create_sale_booking(payload: Dict[str, Any] = Body(...)):
         str(uuid.uuid4()),
         payload.get("farmer_id", "F-GURPREET-01"),
         "Pre-Sale Request Dispatched",
-        f"Pre-sale contract for {payload['quantity_qtl']} Qtl {payload['crop']} confirmed with {buyer_name} at â‚¹{payload['offered_price']}/Qtl."
+        f"Pre-sale contract for {payload['quantity_qtl']} Qtl {payload['crop']} confirmed with {buyer_name} at Ã¢â€šÂ¹{payload['offered_price']}/Qtl."
     ))
 
     conn.commit()
@@ -295,13 +297,13 @@ def process_farmer_voice_query(payload: Dict[str, Any] = Body(...)):
 
     if "buyer" in query or "kaun" in query or "bhav" in query or "rate" in query or "kharid" in query or "mandi" in query:
         if lang == "pa":
-            speech = f"à¨¤à©à¨¹à¨¾à¨¡à©‡ à¨²à¨ˆ à¨¸à¨­ à¨¤à©‹à¨‚ à¨µà¨§à©€à¨† à¨—à¨¾à¨¹à¨• {b_name} à¨¹à©ˆ, à¨œà©‹ â‚¹{b_price} à¨ªà©à¨°à¨¤à©€ à¨•à©à¨‡à©°à¨Ÿà¨² à¨¦à¨¾ à¨°à©‡à¨Ÿ à¨¦à©‡ à¨°à¨¹à©‡ à¨¹à¨¨à¥¤"
+            speech = f"Ã Â¨Â¤Ã Â©ÂÃ Â¨Â¹Ã Â¨Â¾Ã Â¨Â¡Ã Â©â€¡ Ã Â¨Â²Ã Â¨Ë† Ã Â¨Â¸Ã Â¨Â­ Ã Â¨Â¤Ã Â©â€¹Ã Â¨â€š Ã Â¨ÂµÃ Â¨Â§Ã Â©â‚¬Ã Â¨â€  Ã Â¨â€”Ã Â¨Â¾Ã Â¨Â¹Ã Â¨â€¢ {b_name} Ã Â¨Â¹Ã Â©Ë†, Ã Â¨Å“Ã Â©â€¹ Ã¢â€šÂ¹{b_price} Ã Â¨ÂªÃ Â©ÂÃ Â¨Â°Ã Â¨Â¤Ã Â©â‚¬ Ã Â¨â€¢Ã Â©ÂÃ Â¨â€¡Ã Â©Â°Ã Â¨Å¸Ã Â¨Â² Ã Â¨Â¦Ã Â¨Â¾ Ã Â¨Â°Ã Â©â€¡Ã Â¨Å¸ Ã Â¨Â¦Ã Â©â€¡ Ã Â¨Â°Ã Â¨Â¹Ã Â©â€¡ Ã Â¨Â¹Ã Â¨Â¨Ã Â¥Â¤"
         elif lang == "hi":
-            speech = f"à¤†à¤ªà¤•à¥‡ à¤²à¤¿à¤ à¤¸à¤¬à¤¸à¥‡ à¤¬à¥‡à¤¹à¤¤à¤° à¤–à¤°à¥€à¤¦à¤¾à¤° {b_name} à¤¹à¥ˆà¤‚, à¤œà¥‹ â‚¹{b_price} à¤ªà¥à¤°à¤¤à¤¿ à¤•à¥à¤µà¤¿à¤‚à¤Ÿà¤² à¤•à¤¾ à¤°à¥‡à¤Ÿ à¤¦à¥‡ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚à¥¤"
+            speech = f"Ã Â¤â€ Ã Â¤ÂªÃ Â¤â€¢Ã Â¥â€¡ Ã Â¤Â²Ã Â¤Â¿Ã Â¤Â Ã Â¤Â¸Ã Â¤Â¬Ã Â¤Â¸Ã Â¥â€¡ Ã Â¤Â¬Ã Â¥â€¡Ã Â¤Â¹Ã Â¤Â¤Ã Â¤Â° Ã Â¤â€“Ã Â¤Â°Ã Â¥â‚¬Ã Â¤Â¦Ã Â¤Â¾Ã Â¤Â° {b_name} Ã Â¤Â¹Ã Â¥Ë†Ã Â¤â€š, Ã Â¤Å“Ã Â¥â€¹ Ã¢â€šÂ¹{b_price} Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â¤Ã Â¤Â¿ Ã Â¤â€¢Ã Â¥ÂÃ Â¤ÂµÃ Â¤Â¿Ã Â¤â€šÃ Â¤Å¸Ã Â¤Â² Ã Â¤â€¢Ã Â¤Â¾ Ã Â¤Â°Ã Â¥â€¡Ã Â¤Å¸ Ã Â¤Â¦Ã Â¥â€¡ Ã Â¤Â°Ã Â¤Â¹Ã Â¥â€¡ Ã Â¤Â¹Ã Â¥Ë†Ã Â¤â€šÃ Â¥Â¤"
         else:
-            speech = f"Your best available buyer offer is â‚¹{b_price} per quintal from {b_name} located at {b_loc}."
+            speech = f"Your best available buyer offer is Ã¢â€šÂ¹{b_price} per quintal from {b_name} located at {b_loc}."
     else:
-        speech = f"AgriSetu live update: Basmati peak confirmed buyer rate is â‚¹{b_price} per quintal."
+        speech = f"AgriSetu live update: Basmati peak confirmed buyer rate is Ã¢â€šÂ¹{b_price} per quintal."
 
     return {
         "status": "success",
@@ -334,3 +336,11 @@ def trigger_gsm(payload: Dict[str, Any] = Body(...)):
 def trigger_erp(payload: Dict[str, Any] = Body(...)):
     b_id = payload.get("buyer_id", "B01")
     return dispatch_corporate_erp_webhook(b_id, payload)
+@router.get("/pytorch-forecast")
+def get_pytorch_forecast(base_price: float = 3720.0, crop: str = "Basmati Paddy"):
+    return run_14day_pytorch_forecast(base_price, crop)
+
+@router.post("/scan-grain-cv")
+def scan_grain_endpoint(payload: Dict[str, Any] = Body(...)):
+    img_b64 = payload.get("image_base64", "")
+    return scan_grain_image_cv(img_b64)

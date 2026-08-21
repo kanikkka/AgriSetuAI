@@ -1,32 +1,43 @@
-import LiveSystemsFeed from @/components/LiveSystemsFeed;
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "@/i18n";
 import { useTranslation } from "react-i18next";
 import VoiceAssistant from "@/components/VoiceAssistant";
+import LiveSystemsFeed from "@/components/LiveSystemsFeed";
 
-export default function FarmerHomeLivePage() {
+export default function ComprehensiveFarmerDashboard() {
   const { t, i18n } = useTranslation();
+  
+  // Role-Based Switcher
+  const [role, setRole] = useState<"farmer" | "buyer">("farmer");
+  
+  // Crop & Form state
   const [crop, setCrop] = useState("Basmati Paddy");
   const [quantityQtl, setQuantityQtl] = useState(32);
   const [moisture, setMoisture] = useState(12.5);
+  const [defectPct, setDefectPct] = useState(1.8);
   const [cashDays, setCashDays] = useState(3);
 
+  // Server Data states
   const [matches, setMatches] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
-  const [returnLoads, setReturnLoads] = useState<any[]>([]);
   const [decision, setDecision] = useState<any>(null);
-  const [weather, setWeather] = useState<any>(null);
+  const [pytorchForecast, setPytorchForecast] = useState<any>(null);
 
-  // Live Buyer Onboarding State
-  const [newBuyerName, setNewBuyerName] = useState("");
-  const [newBuyerRate, setNewBuyerRate] = useState(3780);
-  const [showBuyerModal, setShowBuyerModal] = useState(false);
+  // Computer Vision Scanner state
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Buyer Form state
+  const [buyerName, setBuyerName] = useState("");
+  const [buyerRate, setBuyerRate] = useState(3750);
+  const [buyerMinLot, setBuyerMinLot] = useState(50);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-  const refreshAllData = async () => {
+  const refreshAll = async () => {
     try {
       const mRes = await fetch(`${apiUrl}/api/farmer-hub/buyer-matches?crop=${crop}&quantity_qtl=${quantityQtl}&moisture_pct=${moisture}`);
       const mJson = await mRes.json();
@@ -36,252 +47,291 @@ export default function FarmerHomeLivePage() {
       const bJson = await bRes.json();
       setBookings(bJson.bookings || []);
 
-      const rRes = await fetch(`${apiUrl}/api/farmer-hub/return-freight`);
-      const rJson = await rRes.json();
-      setReturnLoads(rJson.loads || []);
-
       const dRes = await fetch(`${apiUrl}/api/farmer-hub/cash-need-decision?days=${cashDays}&qty=${quantityQtl}&crop=${crop}`);
-      const dJson = await dRes.json();
-      setDecision(dJson);
+      setDecision(await dRes.json());
 
-      const wRes = await fetch(`${apiUrl}/api/farmer-hub/live-weather?lat=30.7072&lng=76.2167`);
-      const wJson = await wRes.json();
-      setWeather(wJson);
+      const fRes = await fetch(`${apiUrl}/api/farmer-hub/pytorch-forecast?base_price=3720&crop=${crop}`);
+      setPytorchForecast(await fRes.json());
     } catch (e) {}
   };
 
   useEffect(() => {
-    refreshAllData();
-    const interval = setInterval(refreshAllData, 15000);
-    return () => clearInterval(interval);
+    refreshAll();
   }, [crop, quantityQtl, moisture, cashDays]);
 
-  const requestSaleBooking = async (buyer: any) => {
-    try {
-      const res = await fetch(`${apiUrl}/api/farmer-hub/book-sale`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          farmer_id: "F-GURPREET-01",
-          farmer_name: "Gurpreet Singh",
-          buyer_id: buyer.buyer_id,
-          crop: crop,
-          quantity_qtl: quantityQtl,
-          offered_price: buyer.offered_price,
-          delivery_location: buyer.location
-        })
-      });
-      const data = await res.json();
-      if (data.status === "success") {
-        alert(data.message);
-        refreshAllData();
+  // Handle Real Camera Capture & CV Inference
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/farmer-hub/scan-grain-cv`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_base64: reader.result })
+        });
+        const data = await res.json();
+        setScanResult(data);
+        if (data.detected_moisture_pct) setMoisture(data.detected_moisture_pct);
+        if (data.detected_defect_pct) setDefectPct(data.detected_defect_pct);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsScanning(false);
       }
-    } catch (e) {}
+    };
+    reader.readAsDataURL(file);
   };
 
-  const registerNewBuyer = async () => {
-    if (!newBuyerName.trim()) return;
+  const registerBuyerBid = async () => {
+    if (!buyerName.trim()) return;
     try {
-      const res = await fetch(`${apiUrl}/api/farmer-hub/register-buyer`, {
+      await fetch(`${apiUrl}/api/farmer-hub/register-buyer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: newBuyerName,
+          name: buyerName,
           buyer_type: "Corporate Procurement",
-          location_name: "Khanna Agro Hub",
-          offered_price_per_qtl: Number(newBuyerRate),
+          location_name: "Khanna Agro Complex",
+          offered_price_per_qtl: Number(buyerRate),
+          min_quantity_qtl: Number(buyerMinLot),
           required_crop: crop
         })
       });
-      const data = await res.json();
-      if (data.status === "success") {
-        alert(data.message);
-        setNewBuyerName("");
-        setShowBuyerModal(false);
-        refreshAllData();
-      }
+      alert(`Quote of ₹${buyerRate}/Qtl submitted by ${buyerName}!`);
+      setBuyerName("");
+      refreshAll();
     } catch (e) {}
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20 font-sans">
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-emerald-800 to-teal-900 text-white p-6 rounded-3xl shadow-md flex justify-between items-center">
-        <div>
-          <span className="bg-emerald-700/60 text-emerald-200 text-xs font-bold px-3 py-1 rounded-full border border-emerald-600">
-            ðŸŒ¾ {t("app_title")} â€¢ 100% Production Ready
-          </span>
-          <h1 className="text-2xl md:text-3xl font-black mt-2">
-            {t("sell_title")}
-          </h1>
-          <p className="text-emerald-100 text-xs mt-1">
-            {t("sell_desc")}
-          </p>
+    <div className="max-w-6xl mx-auto space-y-6 pb-20 font-sans">
+      {/* Top Role Selector Bar */}
+      <div className="bg-slate-900 text-white p-4 rounded-3xl flex flex-wrap justify-between items-center gap-3 border border-slate-800 shadow-md">
+        <div className="flex items-center gap-3">
+          <span className="text-xl">🌱</span>
+          <div>
+            <h1 className="text-base font-black tracking-tight">AgriSetu AI Enterprise Gateway</h1>
+            <p className="text-[10px] text-emerald-400 font-mono">PyTorch LSTM + Computer Vision Active</p>
+          </div>
         </div>
 
-        <button
-          onClick={() => setShowBuyerModal(!showBuyerModal)}
-          className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black px-4 py-2.5 rounded-2xl text-xs transition shadow-sm"
-        >
-          + Post Live Buyer Bid
-        </button>
-      </div>
-
-      {/* Live Buyer Modal / Onboarding */}
-      {showBuyerModal && (
-        <div className="bg-slate-900 text-white p-5 rounded-3xl border border-slate-700 space-y-3">
-          <h3 className="text-sm font-black text-amber-400">ðŸ¢ Live Buyer Registration & Reverse Bidding</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              type="text"
-              placeholder="Corporate Buyer Name (e.g. NestlÃ© India)"
-              value={newBuyerName}
-              onChange={(e) => setNewBuyerName(e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
-            />
-            <input
-              type="number"
-              placeholder="Offered Bid Rate (â‚¹/Quintal)"
-              value={newBuyerRate}
-              onChange={(e) => setNewBuyerRate(Number(e.target.value))}
-              className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
-            />
-          </div>
+        {/* Role Toggle Switch */}
+        <div className="flex bg-slate-800 p-1 rounded-2xl border border-slate-700 text-xs">
           <button
-            onClick={registerNewBuyer}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2 rounded-xl text-xs"
+            onClick={() => setRole("farmer")}
+            className={`px-4 py-1.5 rounded-xl font-bold transition ${
+              role === "farmer" ? "bg-emerald-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+            }`}
           >
-            Submit Real-time Buyer Quote
+            👨‍🌾 Farmer View (Gurpreet Singh)
+          </button>
+          <button
+            onClick={() => setRole("buyer")}
+            className={`px-4 py-1.5 rounded-xl font-bold transition ${
+              role === "buyer" ? "bg-amber-500 text-slate-950 shadow-sm" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            🏢 Corporate Buyer Portal
           </button>
         </div>
-      )}
-
-      {/* Live Open-Meteo Weather Bar */}
-      {weather && (
-        <div className="bg-slate-900 text-white px-5 py-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs border border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span>ðŸŒ¤ï¸ Khanna Hyperlocal: <strong>{weather.temperature_c}Â°C</strong></span>
-            <span>â€¢ Humidity: <strong>{weather.relative_humidity_pct}%</strong></span>
-          </div>
-          <div className="text-emerald-400 font-bold">
-            ðŸ›¡ï¸ Moisture Risk: {weather.moisture_risk_level} (3-Day Rain Prob: {weather.max_rain_probability_3d_pct}%)
-          </div>
-        </div>
-      )}
-
-      {/* Real Voice Assistant Engine */}
-      <LiveSystemsFeed />`n`n      <VoiceAssistant />
-
-      {/* 1. Harvest Input Details */}
-      <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-3">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
-          <span>ðŸŒ¾</span>
-          <span>{t("my_crop")}</span>
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 block mb-1">{t("crop_name")}:</label>
-            <select
-              value={crop}
-              onChange={(e) => setCrop(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
-            >
-              <option value="Basmati Paddy">Basmati Paddy</option>
-              <option value="Wheat">Wheat</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 block mb-1">{t("quantity")}:</label>
-            <input
-              type="number"
-              value={quantityQtl}
-              onChange={(e) => setQuantityQtl(Number(e.target.value))}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-900"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 block mb-1">{t("moisture")}:</label>
-            <input
-              type="number"
-              step="0.1"
-              value={moisture}
-              onChange={(e) => setMoisture(Number(e.target.value))}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-900"
-            />
-          </div>
-        </div>
       </div>
 
-      {/* 2. Real Buyers Match */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-        <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
-          <span>ðŸ¤</span>
-          <span>{t("ready_buyers")} ({matches.length})</span>
-        </h2>
+      {/* Production Integrations Monitor */}
+      <LiveSystemsFeed />
 
-        {matches.length === 0 ? (
-          <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100 text-slate-500 text-xs font-bold">
-            {t("no_buyers")}
+      {role === "buyer" ? (
+        /* ================= BUYER PORTAL ================= */
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-6">
+          <div>
+            <span className="bg-amber-100 text-amber-900 text-[11px] font-black px-3 py-1 rounded-full uppercase">
+              Corporate Reverse Auction Desk
+            </span>
+            <h2 className="text-xl font-black text-slate-900 mt-2">Post Live Procurement Quote</h2>
+            <p className="text-xs text-slate-500">Quotes are committed directly to SQLite & matched with local smallholders.</p>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {matches.map((b, idx) => (
-              <div
-                key={idx}
-                className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white transition flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-600 block mb-1">Company / Mill Name:</label>
+              <input
+                type="text"
+                placeholder="e.g. Nestlé Agri Sourcing"
+                value={buyerName}
+                onChange={(e) => setBuyerName(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-600 block mb-1">Bid Price (₹/Quintal):</label>
+              <input
+                type="number"
+                value={buyerRate}
+                onChange={(e) => setBuyerRate(Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-900"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-600 block mb-1">Minimum Lot Required (Qtl):</label>
+              <input
+                type="number"
+                value={buyerMinLot}
+                onChange={(e) => setBuyerMinLot(Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-900"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={registerBuyerBid}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-3 rounded-2xl text-xs transition"
+          >
+            + Publish Live Procurement Contract
+          </button>
+        </div>
+      ) : (
+        /* ================= FARMER DASHBOARD ================= */
+        <div className="space-y-6">
+          {/* Real-time Voice Engine */}
+          <VoiceAssistant />
+
+          {/* COMPUTER VISION GRAIN QUALITY SCANNER */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>🔬</span>
+                  <span>AI Grain Moisture & Defect Scanner (Computer Vision)</span>
+                </h2>
+                <p className="text-xs text-slate-500">Capture or upload grain sample to calculate moisture % and zero-cut FCI pass.</p>
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm"
               >
+                <span>📷</span>
+                <span>{isScanning ? "Analyzing Pixels..." : "Scan Grain Sample"}</span>
+              </button>
+            </div>
+
+            {scanResult && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
+                  <span className="text-slate-400 font-bold block text-[10px]">Detected Moisture</span>
+                  <span className="text-lg font-black text-emerald-800">{scanResult.detected_moisture_pct}%</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
+                  <span className="text-slate-400 font-bold block text-[10px]">Defect Pixel Ratio</span>
+                  <span className="text-lg font-black text-emerald-800">{scanResult.detected_defect_pct}%</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
+                  <span className="text-slate-400 font-bold block text-[10px]">Uniformity Score</span>
+                  <span className="text-lg font-black text-emerald-800">{scanResult.grain_uniformity_score}%</span>
+                </div>
+                <div className="bg-emerald-700 text-white p-2.5 rounded-xl flex flex-col justify-center">
+                  <span className="text-[10px] font-bold block text-emerald-200">Quality Certificate</span>
+                  <span className="text-xs font-black">{scanResult.assigned_grade}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 14-DAY PYTORCH LSTM FORECAST CHART */}
+          {pytorchForecast && (
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-slate-900 text-sm">{b.buyer_name}</h3>
-                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                      {b.match_score}% Match
+                  <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded">
+                    {pytorchForecast.model_architecture}
+                  </span>
+                  <h2 className="text-base font-black text-slate-900 mt-1">14-Day PyTorch AI Price Forecast</h2>
+                </div>
+                <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl">
+                  Optimal Window: {pytorchForecast.optimal_sell_window}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 text-center text-xs">
+                {pytorchForecast.forecast_14_days?.map((f: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className={`p-2.5 rounded-xl border transition ${
+                      f.recommendation.includes("PEAK")
+                        ? "bg-amber-50 border-amber-400 shadow-xs"
+                        : "bg-slate-50 border-slate-100"
+                    }`}
+                  >
+                    <span className="text-[10px] text-slate-400 font-bold block">{f.date}</span>
+                    <span className="text-sm font-black text-slate-900 block mt-0.5">₹{f.predicted_price}</span>
+                    <span className={`text-[9px] font-bold block mt-1 ${
+                      f.recommendation.includes("PEAK") ? "text-amber-800 font-black" : "text-slate-500"
+                    }`}>
+                      {f.recommendation}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-600 mt-1">
-                    ðŸ“ {b.location} â€¢ <strong>{b.distance_km} km away</strong> ({b.drive_time})
-                  </p>
-                </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-                <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">{t("price_label")}</span>
-                    <span className="text-2xl font-black text-emerald-700">â‚¹{b.offered_price}</span>
-                    <span className="text-[10px] text-slate-500 block">/ Quintal</span>
+          {/* REAL BUYER DISCOVERY */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+            <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <span>🤝</span>
+              <span>Matched Buyers Ready for Your Crop ({matches.length})</span>
+            </h2>
+
+            <div className="space-y-3">
+              {matches.map((b, idx) => (
+                <div key={idx} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white transition flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-slate-900 text-sm">{b.buyer_name}</h3>
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
+                        {b.match_score}% Match
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1">📍 {b.location} • <strong>{b.distance_km} km away</strong> ({b.drive_time})</p>
                   </div>
-                  <button
-                    onClick={() => requestSaleBooking(b)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition"
-                  >
-                    {t("request_sale")}
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <span className="text-2xl font-black text-emerald-700">₹{b.offered_price}/Qtl</span>
+                    <button
+                      onClick={async () => {
+                        await fetch(`${apiUrl}/api/farmer-hub/book-sale`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            farmer_id: "F-GURPREET-01",
+                            farmer_name: "Gurpreet Singh",
+                            buyer_id: b.buyer_id,
+                            crop: crop,
+                            quantity_qtl: quantityQtl,
+                            offered_price: b.offered_price,
+                            delivery_location: b.location
+                          })
+                        });
+                        alert("Confirmed sale request dispatched!");
+                        refreshAll();
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs"
+                    >
+                      Request Sale
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 3. Confirmed Bookings */}
-      {bookings.length > 0 && (
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-3">
-          <h2 className="text-base font-black text-slate-900">ðŸ“‘ {t("my_bookings")}</h2>
-          <div className="space-y-2">
-            {bookings.map((bk, i) => (
-              <div key={i} className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                <div>
-                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-200 px-2 py-0.5 rounded">
-                    {bk.id} â€¢ {bk.status}
-                  </span>
-                  <h4 className="font-extrabold text-slate-900 text-sm mt-1">{bk.buyer_name}</h4>
-                  <p className="text-xs text-slate-600">{bk.quantity_qtl} Qtl @ â‚¹{bk.agreed_price_per_qtl}/Qtl â€¢ {bk.delivery_location}</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs text-slate-500 block">Gross Value</span>
-                  <span className="text-base font-black text-slate-900">â‚¹{(bk.quantity_qtl * bk.agreed_price_per_qtl).toLocaleString("en-IN")}</span>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
