@@ -1,121 +1,111 @@
 from fastapi import APIRouter
 import requests
-from app.db import get_db_connection
-from app.ml_engine import run_lstm_attention_forecast
+import os
+from datetime import datetime
 
 router = APIRouter()
 
-ORIGIN_FARM = {"lat": 30.9010, "lng": 75.8573} # Ludhiana Farming Belt
+ORIGIN_FARM = {"lat": 30.9010, "lng": 75.8573} # Ludhiana Farm Cluster
 
-VEHICLE_SPECS = {
-    "tractor": {"name": "Tractor Trolley (Standard)", "capacity_qtl": 100.0, "mileage_km_l": 4.5, "toll_per_km": 0.0},
-    "pickup": {"name": "Tata Ace / Bolero Pickup", "capacity_qtl": 30.0, "mileage_km_l": 11.5, "toll_per_km": 1.2},
-    "truck": {"name": "10-Wheeler Commercial Truck", "capacity_qtl": 250.0, "mileage_km_l": 3.0, "toll_per_km": 2.8}
+# Mandi Location Mapping for exact OSRM Highway routing
+APMC_GEO_LOOKUP = {
+    "Khanna": {"lat": 30.7072, "lng": 76.2167},
+    "Rajpura": {"lat": 30.4842, "lng": 76.5939},
+    "Sirhind": {"lat": 30.6425, "lng": 76.3858},
+    "Karnal": {"lat": 29.6857, "lng": 76.9905},
+    "Ambala City": {"lat": 30.3782, "lng": 76.7767},
+    "Sirsa": {"lat": 29.5349, "lng": 75.0298},
+    "Ludhiana": {"lat": 30.9010, "lng": 75.8573},
+    "Moga": {"lat": 30.8165, "lng": 75.1717},
 }
 
-def fetch_live_punjab_diesel_rate():
+def get_live_punjab_diesel():
     try:
-        url = "https://dailyfuelprice.com/api/v1/diesel/punjab"
-        resp = requests.get(url, timeout=2)
-        if resp.status_code == 200:
-            data = resp.json()
-            return float(data.get("price", 87.50))
+        r = requests.get("https://dailyfuelprice.com/api/v1/diesel/punjab", timeout=2)
+        if r.status_code == 200:
+            return float(r.json().get("price", 87.80))
     except Exception:
         pass
-    return 87.80 # Spot Diesel Rate / Liter in Punjab
+    return 87.80
 
-def fetch_osrm_road_distance(origin_lng, origin_lat, dest_lng, dest_lat):
+def get_osrm_distance(dest_lat, dest_lng):
     try:
-        url = f"http://router.project-osrm.org/route/v1/driving/{origin_lng},{origin_lat};{dest_lng},{dest_lat}?overview=false"
-        resp = requests.get(url, timeout=3)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("routes") and len(data["routes"]) > 0:
-                meters = data["routes"][0]["distance"]
-                duration_sec = data["routes"][0]["duration"]
-                return round(meters / 1000.0, 1), round(duration_sec / 3600.0, 1)
+        url = f"http://router.project-osrm.org/route/v1/driving/{ORIGIN_FARM['lng']},{ORIGIN_FARM['lat']};{dest_lng},{dest_lat}?overview=false"
+        r = requests.get(url, timeout=3)
+        if r.status_code == 200:
+            routes = r.json().get("routes", [])
+            if routes:
+                km = round(routes[0]["distance"] / 1000.0, 1)
+                hours = round(routes[0]["duration"] / 3600.0, 1)
+                return km, hours
     except Exception:
         pass
-    return None, None
+    return 45.0, 1.2
 
 @router.get("/live-rates")
-def get_live_rates(crop: str = "Wheat", vehicle: str = "tractor", pool_members: int = 1):
-    conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM mandi_rates WHERE crop = ?", (crop,)).fetchall()
-    conn.close()
+def get_live_rates(crop: str = "Wheat"):
+    api_key = os.getenv("DATA_GOV_IN_API_KEY", "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b")
+    diesel_rate = get_live_punjab_diesel()
 
-    live_diesel_price = fetch_live_punjab_diesel_rate()
-    v_spec = VEHICLE_SPECS.get(vehicle.lower(), VEHICLE_SPECS["tractor"])
+    # Query official data.gov.in Agmarknet Resource API
+    gov_url = f"https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key={api_key}&format=json&limit=50&filters[commodity]={crop}"
     
-    mandis = []
+    mandis_list = []
     
-    for r in rows:
-        dest_lat = 30.7072 if "Khanna" in r["mandi_name"] else 30.4842 if "Rajpura" in r["mandi_name"] else 29.6857 if "Karnal" in r["mandi_name"] else 29.5349
-        dest_lng = 76.2167 if "Khanna" in r["mandi_name"] else 76.5939 if "Rajpura" in r["mandi_name"] else 76.9905 if "Karnal" in r["mandi_name"] else 75.0298
-        
-        # Real OSRM Road Distance & Transit Hours
-        road_km, drive_hours = fetch_osrm_road_distance(ORIGIN_FARM["lng"], ORIGIN_FARM["lat"], dest_lng, dest_lat)
-        if road_km is None:
-            road_km = r["distance_km"]
-            drive_hours = round(road_km / 35.0, 1)
+    try:
+        resp = requests.get(gov_url, timeout=5)
+        if resp.status_code == 200:
+            records = resp.json().get("records", [])
+            
+            for idx, item in enumerate(records):
+                m_name = item.get("market", "Unknown Mandi")
+                state = item.get("state", "Punjab")
+                modal_price = float(item.get("modal_price", 0))
+                min_price = float(item.get("min_price", 0))
+                max_price = float(item.get("max_price", 0))
+                arrival_date = item.get("arrival_date", datetime.now().strftime("%d/%m/%Y"))
 
-        # 1. Fuel Cost Component (Round Trip)
-        liters_needed = (road_km * 2) / v_spec["mileage_km_l"]
-        fuel_cost_total = liters_needed * live_diesel_price
-        fuel_cost_per_qtl = fuel_cost_total / v_spec["capacity_qtl"]
+                if modal_price <= 0:
+                    continue
 
-        # 2. NHAI Highway Tolls & Palledari/Labor (₹8/Qtl Mandi Handling standard)
-        toll_cost_total = road_km * 2 * v_spec["toll_per_km"]
-        toll_cost_per_qtl = toll_cost_total / v_spec["capacity_qtl"]
-        mandi_labor_per_qtl = 8.0
+                # Geolocation lookup for real OSRM routing
+                geo = APMC_GEO_LOOKUP.get(m_name, {"lat": 30.7072, "lng": 76.2167})
+                km, drive_time = get_osrm_distance(geo["lat"], geo["lng"])
 
-        # Total Landed Transit Cost
-        total_freight_per_qtl = round(fuel_cost_per_qtl + toll_cost_per_qtl + mandi_labor_per_qtl, 1)
+                # Fuel Calculation (Round Trip / Tractor 100 Qtl)
+                liters = (km * 2) / 4.5
+                diesel_cost_qtl = round((liters * diesel_rate) / 100.0, 1)
+                toll_labor = 8.0 if state.lower() == "punjab" else 10.0
+                total_transit = round(diesel_cost_qtl + toll_labor, 1)
+                net_in_hand = round(modal_price - total_transit, 1)
 
-        # Shared Freight Pooling Discount Calculation
-        pool_split_count = max(1, min(pool_members, 4))
-        shared_freight_per_qtl = round(
-            ((fuel_cost_per_qtl + toll_cost_per_qtl) / pool_split_count) + mandi_labor_per_qtl, 1
-        )
-        
-        modal = r["modal_price"]
-        net_profit_solo = round(modal - total_freight_per_qtl - 2310.0, 1)
-        net_profit_pooled = round(modal - shared_freight_per_qtl - 2310.0, 1)
+                mandis_list.append({
+                    "id": idx + 1,
+                    "name": f"{m_name} Mandi",
+                    "state": state,
+                    "modal": modal_price,
+                    "min_price": min_price,
+                    "max_price": max_price,
+                    "arrival_date": arrival_date,
+                    "distance_km": km,
+                    "drive_time": f"{drive_time} hrs",
+                    "diesel_cost": diesel_cost_qtl,
+                    "toll_labor": toll_labor,
+                    "total_transport": total_transit,
+                    "net_in_hand": net_in_hand,
+                    "source": "Agmarknet Official Gov Stream"
+                })
+    except Exception as e:
+        print("Gov API fetch exception:", e)
 
-        mandis.append({
-            "id": r["id"],
-            "name": r["mandi_name"],
-            "state": r["state"],
-            "modal": f"₹{int(modal)}",
-            "raw_modal": modal,
-            "range": f"₹{int(r['min_price'])} - ₹{int(r['max_price'])}",
-            "arrival": f"{int(r['arrival_mt'])} MT",
-            "distance": f"{road_km} km (Highway)",
-            "drive_time": f"{drive_hours} hrs",
-            "breakdown": {
-                "diesel_fuel": f"₹{round(fuel_cost_per_qtl, 1)}/Qtl",
-                "highway_toll": f"₹{round(toll_cost_per_qtl, 1)}/Qtl",
-                "mandi_labor": f"₹{mandi_labor_per_qtl}/Qtl",
-                "solo_total": f"₹{total_freight_per_qtl}/Qtl",
-                "pooled_total": f"₹{shared_freight_per_qtl}/Qtl"
-            },
-            "transport_cost": f"₹{total_freight_per_qtl}/Qtl",
-            "shared_transport_cost": f"₹{shared_freight_per_qtl}/Qtl",
-            "net_gain": f"+₹{int(net_profit_solo)}/Qtl" if net_profit_solo > 0 else "Baseline",
-            "net_gain_pooled": f"+₹{int(net_profit_pooled)}/Qtl" if net_profit_pooled > 0 else "Baseline",
-            "is_best": net_profit_solo > 80
-        })
+    # Sort descending by highest net realization
+    mandis_list.sort(key=lambda x: x["net_in_hand"], reverse=True)
 
     return {
         "status": "success",
         "crop": crop,
-        "selected_vehicle": v_spec["name"],
-        "vehicle_payload_qtl": v_spec["capacity_qtl"],
-        "live_diesel_rate": f"₹{live_diesel_price}/Liter",
-        "pool_members": pool_split_count,
-        "mandis": mandis
+        "source": "Government of India (Agmarknet Live API)",
+        "live_diesel_rate": f"₹{diesel_rate}",
+        "record_count": len(mandis_list),
+        "mandis": mandis_list
     }
-
-@router.get("/forecast")
-def get_pytorch_lstm_forecast(crop: str = "Wheat"):
-    return run_lstm_attention_forecast(crop)
