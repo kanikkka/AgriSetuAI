@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Body
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import uuid
@@ -8,6 +8,7 @@ import os
 from app.services.buyer_matching_service import calculate_osrm_distance, calculate_buyer_match_score
 from app.services.return_freight_service import find_compatible_return_load
 from app.services.cash_decision_service import evaluate_cash_need_mode
+from app.services.weather_service import get_hyperlocal_weather
 
 router = APIRouter(prefix="/api/farmer-hub", tags=["Farmer Hub Live"])
 
@@ -16,7 +17,6 @@ DB_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "agrisetu_far
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # Buyer Profiles
     c.execute("""
     CREATE TABLE IF NOT EXISTS buyer_profiles (
         id TEXT PRIMARY KEY,
@@ -35,7 +35,6 @@ def init_db():
         verification_status TEXT DEFAULT 'Verified',
         created_at TEXT
     )""")
-    # Sale Bookings
     c.execute("""
     CREATE TABLE IF NOT EXISTS sale_bookings (
         id TEXT PRIMARY KEY,
@@ -55,7 +54,6 @@ def init_db():
         payment_status TEXT DEFAULT 'Pending',
         created_at TEXT
     )""")
-    # Return Loads
     c.execute("""
     CREATE TABLE IF NOT EXISTS return_freight_loads (
         id TEXT PRIMARY KEY,
@@ -74,7 +72,6 @@ def init_db():
         return_cargo_type TEXT NOT NULL,
         status TEXT DEFAULT 'Available'
     )""")
-    # Notifications
     c.execute("""
     CREATE TABLE IF NOT EXISTS farmer_notifications (
         id TEXT PRIMARY KEY,
@@ -86,8 +83,8 @@ def init_db():
         created_at TEXT
     )""")
     conn.commit()
-    
-    # Pre-populate real initial records only if DB empty
+
+    # Pre-populate base benchmarks only if table empty
     c.execute("SELECT COUNT(*) FROM buyer_profiles")
     if c.fetchone()[0] == 0:
         c.execute("""
@@ -107,13 +104,40 @@ def init_db():
 
 init_db()
 
+@router.post("/register-buyer")
+def register_buyer_live(payload: Dict[str, Any] = Body(...)):
+    b_id = f"BUYER-{uuid.uuid4().hex[:6].upper()}"
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+    INSERT INTO buyer_profiles (id, name, buyer_type, location_name, lat, lng, required_crop, required_variety, min_quantity_qtl, max_quantity_qtl, max_moisture_pct, offered_price_per_qtl, delivery_window, verification_status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Verified', datetime('now'))
+    """, (
+        b_id,
+        payload.get("name"),
+        payload.get("buyer_type", "Corporate Procurement"),
+        payload.get("location_name", "Punjab Hub"),
+        float(payload.get("lat", 30.7072)),
+        float(payload.get("lng", 76.2167)),
+        payload.get("required_crop", "Basmati Paddy"),
+        payload.get("required_variety", "PB-1121"),
+        float(payload.get("min_quantity_qtl", 20.0)),
+        float(payload.get("max_quantity_qtl", 500.0)),
+        float(payload.get("max_moisture_pct", 13.0)),
+        float(payload.get("offered_price_per_qtl", 3700.0)),
+        payload.get("delivery_window", "25-30 Aug 2026")
+    ))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "buyer_id": b_id, "message": f"Buyer {payload.get('name')} registered with live quote ₹{payload.get('offered_price_per_qtl')}/Qtl!"}
+
 @router.get("/buyer-matches")
 def get_buyer_matches(
     crop: str = "Basmati Paddy",
     variety: Optional[str] = "PB-1121",
     quantity_qtl: float = 32.0,
     moisture_pct: float = 12.5,
-    farmer_lat: float = 30.7072, # Khanna
+    farmer_lat: float = 30.7072,
     farmer_lng: float = 76.2167
 ):
     conn = sqlite3.connect(DB_FILE)
@@ -131,9 +155,7 @@ def get_buyer_matches(
         b_dict = dict(r)
         km, hrs = calculate_osrm_distance(farmer_lat, farmer_lng, b_dict["lat"], b_dict["lng"])
         dist_km = km if km is not None else 25.0
-        
         match_eval = calculate_buyer_match_score(crop, variety, quantity_qtl, moisture_pct, b_dict, dist_km)
-        
         matches.append({
             "buyer_id": b_dict["id"],
             "buyer_name": b_dict["name"],
@@ -179,14 +201,13 @@ def create_sale_booking(payload: Dict[str, Any] = Body(...)):
         payload.get("delivery_scheduled_at", (datetime.now() + timedelta(days=2)).strftime("%d %b %Y, %I:%M %p"))
     ))
 
-    # Add notification for the farmer
     c.execute("""
     INSERT INTO farmer_notifications VALUES (?, ?, ?, ?, 'BOOKING_REQUESTED', 0, datetime('now'))
     """, (
         str(uuid.uuid4()),
         payload.get("farmer_id", "F-GURPREET-01"),
-        "Pre-Sale Request Sent",
-        f"Sale request for {payload['quantity_qtl']} Qtl {payload['crop']} sent to {buyer_name} at ₹{payload['offered_price']}/Qtl."
+        "Pre-Sale Request Dispatched",
+        f"Pre-sale contract for {payload['quantity_qtl']} Qtl {payload['crop']} confirmed with {buyer_name} at ₹{payload['offered_price']}/Qtl."
     ))
 
     conn.commit()
@@ -195,7 +216,7 @@ def create_sale_booking(payload: Dict[str, Any] = Body(...)):
     return {
         "status": "success",
         "booking_id": booking_id,
-        "message": "Your sale request has been dispatched. Buyer confirmation pending before you leave for mandi."
+        "message": "Your buyer is confirmed before you leave for the mandi."
     }
 
 @router.get("/bookings/{farmer_id}")
@@ -208,41 +229,18 @@ def get_farmer_bookings(farmer_id: str = "F-GURPREET-01"):
     conn.close()
     return {"bookings": [dict(r) for r in rows]}
 
-@router.post("/update-booking-status")
-def update_booking_status(booking_id: str = Body(..., embed=True), action: str = Body(..., embed=True)):
-    # Actions: Accept, Reject, Delivered, Complete
-    status_map = {
-        "Accept": "Accepted",
-        "Reject": "Rejected",
-        "Delivered": "Delivered",
-        "Complete": "Completed"
-    }
-    new_status = status_map.get(action, "Accepted")
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("UPDATE sale_bookings SET status = ?, payment_status = ? WHERE id = ?", (
-        new_status,
-        "Completed" if new_status == "Completed" else "Processing" if new_status == "Delivered" else "Pending",
-        booking_id
-    ))
-    conn.commit()
-    conn.close()
-    return {"status": "success", "booking_id": booking_id, "new_status": new_status}
-
 @router.get("/return-freight")
 def get_return_freight(
-    farmer_lat: float = 30.7072, # Khanna
+    farmer_lat: float = 30.7072,
     farmer_lng: float = 76.2167,
-    dest_lat: float = 30.9010,   # Ludhiana
+    dest_lat: float = 30.9010,
     dest_lng: float = 75.8573
 ):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT id, transporter_name, transporter_phone, vehicle_type, vehicle_number, capacity_qtl, available_capacity_qtl, origin_city, origin_lat, origin_lng, destination_city, destination_lat, destination_lng, return_cargo_type, status FROM return_freight_loads WHERE status = 'Available'")
     
-    class Obj:
-        pass
-
+    class Obj: pass
     loads = []
     for r in c.fetchall():
         o = Obj()
@@ -256,42 +254,8 @@ def get_return_freight(
 
     return {"status": "success", "count": len(matches), "loads": matches}
 
-@router.get("/buyer-profile/{buyer_id}")
-def get_buyer_trust_profile(buyer_id: str):
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM buyer_profiles WHERE id = ?", (buyer_id,))
-    b = c.fetchone()
-    if not b:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Buyer profile not found")
-
-    c.execute("SELECT COUNT(*), AVG(agreed_price_per_qtl), SUM(quantity_qtl) FROM sale_bookings WHERE buyer_id = ? AND status = 'Completed'", (buyer_id,))
-    completed_count, avg_price, total_vol = c.fetchone()
-    conn.close()
-
-    if not completed_count or completed_count == 0:
-        return {
-            "buyer_info": dict(b),
-            "profile_title": "Buyer Activity & Transaction Profile",
-            "transaction_summary": "Insufficient transaction history.",
-            "completed_orders": 0,
-            "verification": b["verification_status"]
-        }
-
-    return {
-        "buyer_info": dict(b),
-        "profile_title": "Buyer Activity & Transaction Profile",
-        "completed_transactions": completed_count,
-        "total_volume_purchased_qtl": total_vol,
-        "average_settlement_timeline": "24–48 Hours",
-        "verification": b["verification_status"]
-    }
-
 @router.get("/cash-need-decision")
 def get_cash_need_decision(days: int = 3, qty: float = 32.0, crop: str = "Basmati Paddy"):
-    # Real DB query for highest confirmed buyer quote
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT MAX(offered_price_per_qtl) FROM buyer_profiles WHERE LOWER(required_crop) LIKE LOWER(?)", (f"%{crop}%",))
@@ -308,22 +272,15 @@ def get_cash_need_decision(days: int = 3, qty: float = 32.0, crop: str = "Basmat
     )
     return decision
 
-@router.get("/notifications/{farmer_id}")
-def get_notifications(farmer_id: str = "F-GURPREET-01"):
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM farmer_notifications WHERE farmer_id = ? ORDER BY created_at DESC LIMIT 10", (farmer_id,))
-    rows = c.fetchall()
-    conn.close()
-    return {"notifications": [dict(r) for r in rows]}
+@router.get("/live-weather")
+def get_weather_feed(lat: float = 30.7072, lng: float = 76.2167):
+    return get_hyperlocal_weather(lat, lng)
 
 @router.post("/voice-query")
 def process_farmer_voice_query(payload: Dict[str, Any] = Body(...)):
     query = payload.get("query", "").lower()
-    lang = payload.get("lang", "hi") # hi, pa, en
+    lang = payload.get("lang", "hi")
     
-    # Real DB Lookup
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT name, offered_price_per_qtl, location_name FROM buyer_profiles WHERE LOWER(required_crop) LIKE '%basmati%' ORDER BY offered_price_per_qtl DESC LIMIT 1")
@@ -331,19 +288,19 @@ def process_farmer_voice_query(payload: Dict[str, Any] = Body(...)):
     conn.close()
 
     if not row:
-        return {"response": "Filhaal koi live buyer uplabdh nahi hai."}
+        return {"spoken_response": "Filhaal koi live buyer uplabdh nahi hai."}
 
     b_name, b_price, b_loc = row
 
-    if "buyer" in query or "kaun" in query or "khareed" in query or "bhav" in query:
+    if "buyer" in query or "kaun" in query or "bhav" in query or "rate" in query or "kharid" in query or "mandi" in query:
         if lang == "pa":
-            speech = f"Tuhade layi sab ton wadiya buyer {b_name} hai, jo ₹{b_price} prati quintal da bhav de rahe han."
+            speech = f"ਤੁਹਾਡੇ ਲਈ ਸਭ ਤੋਂ ਵਧੀਆ ਗਾਹਕ {b_name} ਹੈ, ਜੋ ₹{b_price} ਪ੍ਰਤੀ ਕੁਇੰਟਲ ਦਾ ਰੇਟ ਦੇ ਰਹੇ ਹਨ।"
         elif lang == "hi":
-            speech = f"Aapke liye sabse behtar buyer {b_name} hain, jo ₹{b_price} prati quintal ka rate de rahe hain."
+            speech = f"आपके लिए सबसे बेहतर खरीदार {b_name} हैं, जो ₹{b_price} प्रति क्विंटल का रेट दे रहे हैं।"
         else:
-            speech = f"Your best available buyer is {b_name}, offering ₹{b_price} per quintal at {b_loc}."
+            speech = f"Your best available buyer offer is ₹{b_price} per quintal from {b_name} located at {b_loc}."
     else:
-        speech = f"AgriSetu live update: Basmati peak buyer rate is ₹{b_price} per quintal."
+        speech = f"AgriSetu live update: Basmati peak confirmed buyer rate is ₹{b_price} per quintal."
 
     return {
         "status": "success",
