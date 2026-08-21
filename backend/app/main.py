@@ -1,3 +1,5 @@
+from app.api.farmer_hub import router as farmer_hub_router
+from app.api.collective import router as collective_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.mandi import router as mandi_router
@@ -35,3 +37,6 @@ def read_root():
         "nasa_firms": "Live MODIS Feed",
         "open_meteo": "Live Weather Feed"
     }
+app.include_router(collective_router)
+
+app.include_router(farmer_hub_router)

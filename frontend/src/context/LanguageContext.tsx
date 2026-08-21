@@ -1,62 +1,101 @@
-﻿"use client";
+"use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 
 export type Language = "en" | "hi" | "pa";
 
+interface Translations {
+  [key: string]: {
+    en: string;
+    hi: string;
+    pa: string;
+  };
+}
+
+export const translations: Translations = {
+  // App Titles & Navigation
+  app_name: { en: "AgriSetu AI", hi: "एग्रीसेतु AI", pa: "ਐਗਰੀਸੇਤੂ AI" },
+  nav_farmer_hub: { en: "Farmer Pre-Sale Hub", hi: "किसान प्री-सेल हब", pa: "ਕਿਸਾਨ ਪ੍ਰੀ-ਸੇਲ ਹੱਬ" },
+  nav_collective: { en: "Collective Selling", hi: "सामूहिक बिक्री (FPO)", pa: "ਸਾਂਝੀ ਵਿਕਰੀ (FPO)" },
+  nav_mandi_rates: { en: "Mandi Rates & Map", hi: "मंडी भाव और मैप", pa: "ਮੰਡੀ ਭਾਅ ਅਤੇ ਨਕਸ਼ਾ" },
+  nav_quality: { en: "Quality & QR Pass", hi: "क्वालिटी और QR पास", pa: "ਕੁਆਲਿਟੀ ਅਤੇ QR ਪਾਸ" },
+  nav_copilot: { en: "Voice AI Copilot", hi: "वॉइस AI को-पायलट", pa: "ਵਾਇਸ AI ਕੋ-ਪਾਇਲਟ" },
+  
+  // Top Status Bar
+  spot_diesel: { en: "Punjab Spot Diesel", hi: "पंजाब डीज़ल रेट", pa: "ਪੰਜਾਬ ਡੀਜ਼ਲ ਰੇਟ" },
+  live_status: { en: "Live Grid Active", hi: "लाइव ग्रिड सक्रिय", pa: "ਲਾਈਵ ਗਰਿੱਡ ਚਾਲੂ" },
+  
+  // Farmer Pre-Sale Hub
+  sell_before_travel: { en: "Sell Before You Travel", hi: "घर से निकलने से पहले फसल बेचें", pa: "ਘਰੋਂ ਨਿਕਲਣ ਤੋਂ ਪਹਿਲਾਂ ਫ਼ਸਲ ਵੇਚੋ" },
+  sell_subtext: { en: "Lock in a confirmed buyer & price before you leave your farm.", hi: "मंडी जाने से पहले पक्का खरीदार और सही दाम तय करें।", pa: "ਮੰਡੀ ਜਾਣ ਤੋਂ ਪਹਿਲਾਂ ਪੱਕਾ ਖਰੀਦਦਾਰ ਅਤੇ ਸਹੀ ਰੇਟ ਤੈਅ ਕਰੋ।" },
+  my_harvest: { en: "My Harvest Details", hi: "मेरी फसल का विवरण", pa: "ਮੇਰੀ ਫ਼ਸਲ ਦਾ ਵੇਰਵਾ" },
+  select_crop: { en: "Select Crop", hi: "फसल चुनें", pa: "ਫ਼ਸਲ ਚੁਣੋ" },
+  quantity_qtl: { en: "Quantity (Quintals)", hi: "कुल मात्रा (क्विंटल)", pa: "ਕੁੱਲ ਮਾਤਰਾ (ਕੁਇੰਟਲ)" },
+  moisture_pct: { en: "Moisture (%)", hi: "नमी (%)", pa: "ਨਮੀ (%)" },
+  real_buyers: { en: "Real Buyers Ready For Your Crop", hi: "आपकी फसल के लिए तैयार खरीदार", pa: "ਤੁਹਾਡੀ ਫ਼ਸਲ ਲਈ ਤਿਆਰ ਖਰੀਦਦਾਰ" },
+  no_buyers: { en: "No eligible buyer currently available.", hi: "फिलहाल कोई पात्र खरीदार उपलब्ध नहीं है।", pa: "ਫਿਲਹਾਲ ਕੋਈ ਯੋਗ ਖਰੀਦਦਾਰ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।" },
+  request_sale: { en: "Request Sale", hi: "बिक्री का अनुरोध करें", pa: "ਵੇਚਣ ਦੀ ਬੇਨਤੀ ਕਰੋ" },
+  offered_price: { en: "Offered Price", hi: "प्रस्तावित भाव", pa: "ਮਿਲਣ ਵਾਲਾ ਰੇਟ" },
+  distance_away: { en: "away", hi: "दूर", pa: "ਦੂਰ" },
+  
+  // Bookings
+  my_bookings: { en: "My Pre-Sale Bookings", hi: "मेरी पूर्व-बिक्री बुकिंग", pa: "ਮੇਰੀਆਂ ਪੱਕੀਆਂ ਬੁਕਿੰਗਾਂ" },
+  gross_value: { en: "Gross Value", hi: "कुल मूल्य", pa: "ਕੁੱਲ ਰਕਮ" },
+  
+  // Cash Need Mode
+  money_needed_by: { en: "Money Needed By (Cash Flow)", hi: "पैसों की ज़रूरत कब तक है?", pa: "ਪੈਸਿਆਂ ਦੀ ਲੋੜ ਕਦੋਂ ਤੱਕ ਹੈ?" },
+  today: { en: "Today", hi: "आज ही", pa: "ਅੱਜ ਹੀ" },
+  days_3: { en: "3 Days", hi: "3 दिन", pa: "3 ਦਿਨ" },
+  days_7: { en: "7 Days", hi: "7 दिन", pa: "7 ਦਿਨ" },
+  days_15: { en: "15 Days", hi: "15 दिन", pa: "15 ਦਿਨ" },
+  days_30: { en: "30 Days", hi: "30 दिन", pa: "30 ਦਿਨ" },
+  recommended: { en: "RECOMMENDED", hi: "सुझाव", pa: "ਸੁਝਾਅ" },
+  
+  // Return Freight
+  return_freight: { en: "Return Load Finder (Save on Empty Trips)", hi: "वापसी लोड खोजें (खाली ट्रिप बचाएं)", pa: "ਵਾਪਸੀ ਦਾ ਕਿਰਾਇਆ ਬਚਾਓ" },
+  no_return_load: { en: "No compatible return load currently available.", hi: "फिलहाल कोई वापसी लोड उपलब्ध नहीं है।", pa: "ਕੋਈ ਵਾਪਸੀ ਲੋਡ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।" },
+  save_freight: { en: "Save Freight", hi: "किराया बचत", pa: "ਕਿਰਾਇਆ ਬੱਚਤ" },
+  
+  // Voice Assistant
+  talk_to_agrisetu: { en: "Talk to AgriSetu (Voice Assistant)", hi: "एग्रीसेतु से बात करें (वॉइस सहायक)", pa: "ਐਗਰੀਸੇਤੂ ਨਾਲ ਗੱਲ ਕਰੋ (ਵਾਇਸ ਸਹਾਇਕ)" },
+  ask_button: { en: "Ask", hi: "पूछें", pa: "ਪੁੱਛੋ" },
+  voice_placeholder: { en: "Ask: 'Who is the best buyer for my crop today?'", hi: "पूछें: 'आज मेरी फसल का सबसे अच्छा खरीदार कौन है?'", pa: "ਪੁੱਛੋ: 'ਅੱਜ ਮੇਰੀ ਫ਼ਸਲ ਦਾ ਸਭ ਤੋਂ ਵਧੀਆ ਗਾਹਕ ਕੌਣ ਹੈ?'" }
+};
+
 interface LanguageContextType {
-  lang: Language;
-  setLang: (lang: Language) => void;
+  language: Language;
+  setLanguage: (lang: Language) => void;
   t: (key: string) => string;
 }
 
-const translations: Record<string, Record<Language, string>> = {
-  appName: { en: "AgriSetu AI", hi: "एग्रीसेतु AI", pa: "ਐਗਰੀਸੇਤੂ AI" },
-  dashboard: { en: "Dashboard", hi: "डैशबोर्ड", pa: "ਡੈਸ਼ਬੋਰਡ" },
-  market: { en: "7-Day Market AI", hi: "7-दिवसीय बाज़ार AI", pa: "7-ਦਿਨਾਂ ਮੰਡੀ AI" },
-  simulator: { en: "Profit Simulator", hi: "मुनाफा सिमुलेटर", pa: "ਮੁਨਾਫਾ ਸਿਮੂਲੇਟਰ" },
-  coalitions: { en: "Farmer Coalitions", hi: "किसान समूह", pa: "ਕਿਸਾਨ ਸਮੂਹ" },
-
-  // Spatial Arbitrage
-  spatialArbitrageBadge: { en: "Spatial Arbitrage Optimization", hi: "अंतर-मंडी मूल्य अंतर एवं मुनाफा", pa: "ਅੰਤਰ-ਮੰਡੀ ਮੁੱਲ ਅੰਤਰ ਅਤੇ ਮੁਨਾਫਾ" },
-  spatialArbitrageTitle: { en: "Inter-Mandi Spatial Arbitrage Optimizer", hi: "अंतर-मंडी लॉजिस्टिक्स एवं मुनाफा अनुकूलक", pa: "ਅੰਤਰ-ਮੰਡੀ ਲੌਜਿਸਟਿਕਸ ਅਤੇ ਮੁਨਾਫਾ ਅਨੁਕੂਲਕ" },
-  spatialArbitrageSubtitle: { en: "Net profit after deducting round-trip diesel & freight costs across Punjab APMCs.", hi: "पंजाब की मंडियों में डीजल और मालभाड़ा काटकर शुद्ध अतिरिक्त मुनाफा।", pa: "ਪੰਜਾਬ ਦੀਆਂ ਮੰਡੀਆਂ ਵਿੱਚ ਡੀਜ਼ਲ ਅਤੇ ਮਾਲ-ਭਾੜਾ ਕੱਟ ਕੇ ਸ਼ੁੱਧ ਵਾਧੂ ਮੁਨਾਫਾ।" },
-
-  // Circular Economy
-  stubbleEconomyTitle: { en: "Stubble-to-Biofuel Circular Economy Calculator", hi: "पराली से बायो-ईंधन चक्रीय अर्थव्यवस्था कैलकुलेटर", pa: "ਪਰਾਲੀ ਤੋਂ ਬਾਇਓ-ਫਿਊਲ ਸਰਕੂਲਰ ਇਕਾਨਮੀ ਕੈਲਕੁਲੇਟਰ" },
-  stubbleEconomySubtitle: { en: "Turn stubble into guaranteed cash revenue instead of burning penalties.", hi: "जुर्माने और प्रदूषण के बजाय पराली को सीधी नकद आमदनी में बदलें।", pa: "ਜੁਰਮਾਨੇ ਦੀ ਬਜਾਏ ਪਰਾਲੀ ਨੂੰ ਸਿੱਧੀ ਨਕਦ ਕਮਾਈ ਵਿੱਚ ਬਦਲੋ।" },
-  landAcres: { en: "Land Size (Acres)", hi: "जमीन का आकार (एकड़)", pa: "ਜ਼ਮੀਨ ਦਾ ਆਕਾਰ (ਏਕੜ)" },
-  netStrawProfit: { en: "Net In-Hand Biomass Revenue", hi: "शुद्ध इन-हैंड पराली मुनाफा", pa: "ਕੁੱਲ ਹੱਥ ਵਿੱਚ ਪਰਾਲੀ ਮੁਨਾਫਾ" },
-  avoidedCo2: { en: "CO2 Emissions Prevented", hi: "रोका गया कार्बन उत्सर्जन", pa: "ਰੋਕਿਆ ਗਿਆ ਕਾਰਬਨ ਪ੍ਰਦੂਸ਼ਣ" },
-
-  // Grain Inspector
-  grainInspectorTitle: { en: "AI Grain Quality & FCI Grading Shield", hi: "एआई अनाज गुणवत्ता और एफसीआई ग्रेडिंग प्रमाणक", pa: "AI ਅਨਾਜ ਗੁਣਵੱਤਾ ਅਤੇ FCI ਗਰੇਡਿੰਗ ਪ੍ਰਮਾਣਕ" },
-  grainInspectorSubtitle: { en: "Scientific image & sample inspection to stop arbitrary dockage deductions by local middle-men.", hi: "आढ़तियों द्वारा मनमानी कटौती रोकने के लिए वैज्ञानिक नमूना परीक्षण।", pa: "ਆੜ੍ਹਤੀਆਂ ਵੱਲੋਂ ਮਨਮਾਨੀ ਕਟੌਤੀ ਰੋਕਣ ਲਈ ਵਿਗਿਆਨਕ ਨਮੂਨਾ ਟੈਸਟ।" },
-
-  // Biological Decay
-  decayTitle: { en: "Biological Grain Respiration & Spoilage Decay Curve", hi: "जैविक अनाज श्वसन और गुणवत्ता क्षय वक्र", pa: "ਜੈਵਿਕ ਅਨਾਜ ਸਾਹ-ਦਰ ਅਤੇ ਗੁਣਵੱਤਾ ਗਿਰਾਵਟ ਵਕਰ" },
-  decaySubtitle: { en: "Thermodynamic moisture-heat decay projection over a 14-day storage holding window.", hi: "तापमान और नमी के आधार पर 14-दिवसीय जैविक भंडारण सुरक्षा विश्लेषण।", pa: "ਤਾਪਮਾਨ ਅਤੇ ਨਮੀ ਦੇ ਅਧਾਰ 'ਤੇ 14-ਦਿਨਾਂ ਜੈਵਿਕ ਸਟੋਰੇਜ ਸੁਰੱਖਿਆ ਵਿਸ਼ਲੇਸ਼ਣ।" },
-  criticalCliff: { en: "Critical Spoilage Cliff Date", hi: "महत्वपूर्ण गुणवत्ता गिरावट सीमा", pa: "ਗੰਭੀਰ ਗੁਣਵੱਤਾ ਗਿਰਾਵਟ ਸੀਮਾ" }
-};
-
 const LanguageContext = createContext<LanguageContextType>({
-  lang: "en",
-  setLang: () => {},
-  t: (key) => key,
+  language: "en",
+  setLanguage: () => {},
+  t: (key: string) => key,
 });
 
-export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [lang, setLang] = useState<Language>("en");
+export const LanguageProvider = ({ children }: { children: React.ReactNode }) => {
+  const [language, setLanguageState] = useState<Language>("en");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("agrisetu_lang") as Language;
+    if (saved && (saved === "en" || saved === "hi" || saved === "pa")) {
+      setLanguageState(saved);
+    }
+  }, []);
+
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang);
+    localStorage.setItem("agrisetu_lang", lang);
+  };
 
   const t = (key: string): string => {
-    if (translations[key] && translations[key][lang]) {
-      return translations[key][lang];
-    }
-    return key;
+    if (!translations[key]) return key;
+    return translations[key][language] || translations[key]["en"] || key;
   };
 
   return (
-    <LanguageContext.Provider value={{ lang, setLang, t }}>
+    <LanguageContext.Provider value={{ language, setLanguage, t }}>
       {children}
     </LanguageContext.Provider>
   );

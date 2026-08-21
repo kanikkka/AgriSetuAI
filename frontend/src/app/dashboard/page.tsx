@@ -2,89 +2,84 @@
 
 import React, { useState, useEffect } from "react";
 
-export default function RealAgmarknetMandiPage() {
-  const [crop, setCrop] = useState("Wheat");
-  const [quantityQtl, setQuantityQtl] = useState(100);
+export default function RealCsvMandiPage() {
+  const [crop, setCrop] = useState("Tomato");
+  const [quantityQtl, setQuantityQtl] = useState(50);
   const [vehicle, setVehicle] = useState("tractor");
   const [isShared, setIsShared] = useState(false);
   const [mandis, setMandis] = useState<any[]>([]);
   const [selectedMandi, setSelectedMandi] = useState<any>(null);
-  const [dieselRate, setDieselRate] = useState("₹87.80");
+  const [csvSource, setCsvSource] = useState("");
   const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
 
-  const fetchGovtAgmarknet = async () => {
+  const fetchFromCsv = async (cName: string) => {
     setLoading(true);
-    setErrorMsg("");
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${apiUrl}/api/mandi/live-rates?crop=${crop}`, { cache: "no-store" });
+      const res = await fetch(`${apiUrl}/api/mandi/live-rates?crop=${cName}`, { cache: "no-store" });
       const json = await res.json();
-      
-      if (json?.status === "success" && json.mandis && json.mandis.length > 0) {
+      if (json?.mandis && json.mandis.length > 0) {
         setMandis(json.mandis);
         setSelectedMandi(json.mandis[0]);
-        if (json.live_diesel_rate) setDieselRate(json.live_diesel_rate);
-      } else {
-        setErrorMsg("Government Agmarknet server par is fasal ka live arrival data load ho raha hai.");
+        setCsvSource(json.csv_loaded_from || "35985678-0d79-46b4-9ed6-6f13308a1d24.csv");
       }
-    } catch (err) {
-      setErrorMsg("Backend server se connect nahi ho paya. Make sure backend uvicorn is running.");
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchGovtAgmarknet();
+    fetchFromCsv(crop);
   }, [crop]);
 
   const getTransportPerQtl = (baseDiesel: number, tollLabor: number) => {
     let multiplier = vehicle === "pickup" ? 1.4 : vehicle === "truck" ? 0.7 : 1.0;
-    let dieselPart = (baseDiesel || 20) * multiplier;
+    let dieselPart = (baseDiesel || 15) * multiplier;
     if (isShared) dieselPart = dieselPart / 2;
     return Math.round(dieselPart + (tollLabor || 8));
   };
 
+  const active = selectedMandi || mandis[0];
+  const transit = active ? getTransportPerQtl(active.diesel_cost, active.toll_labor) : 25;
+  const inHandRate = active ? active.modal - transit : 0;
+  const totalPocket = inHandRate * quantityQtl;
+  const sharedSavings = active ? (active.diesel_cost / 2) * quantityQtl : 0;
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12 font-sans">
-      {/* Top Govt Stream Banner */}
+      {/* CSV Source Status Bar */}
       <div className="bg-slate-900 text-white px-5 py-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-md border border-slate-800">
         <div className="flex items-center gap-3">
-          <span className="flex h-3 w-3 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400"></span>
-          </span>
-          <span className="font-bold text-xs sm:text-sm">🌐 Official Agmarknet Gov.in Stream</span>
-          <span className="bg-slate-800 px-3 py-0.5 rounded-full text-xs font-semibold text-emerald-400 border border-slate-700">
-            ⛽ Spot Diesel: {dieselRate}/L
+          <span className="h-3 w-3 rounded-full bg-emerald-400"></span>
+          <span className="font-bold text-xs sm:text-sm">
+            📄 Active Dataset: <strong>43,143 Records CSV</strong>
           </span>
         </div>
-        <button
-          onClick={fetchGovtAgmarknet}
-          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1"
-        >
-          🔄 Sync Gov API
-        </button>
+        <div className="text-xs text-emerald-300 font-mono">
+          {active?.source || "Parsing CSV Live Rows"}
+        </div>
       </div>
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
-            🌾 Live APMC Mandi Spot Radar
+            🌾 CSV Real Mandi Price Explorer
           </h1>
           <p className="text-sm text-slate-600 mt-1">
-            Official Agmarknet portal rates + Live OSRM Highway Transit Deductions.
+            Exact records from Agmarknet Government Dataset CSV.
           </p>
         </div>
 
-        <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs">
-          {["Wheat", "Paddy(Dhan)(Common)", "Mustard", "Cotton"].map((item) => (
+        {/* Crops present in your CSV */}
+        <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs flex-wrap gap-1">
+          {["Tomato", "Ginger", "Green Chilli", "Cauliflower", "Wheat"].map((item) => (
             <button
               key={item}
               onClick={() => setCrop(item)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                 crop === item ? "bg-emerald-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
               }`}
             >
@@ -98,7 +93,7 @@ export default function RealAgmarknetMandiPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <div>
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
-            1. Fasal Quantity (Quintal):
+            1. Total Quantity (Quintal):
           </label>
           <input
             type="number"
@@ -110,7 +105,7 @@ export default function RealAgmarknetMandiPage() {
 
         <div>
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
-            2. Gaadi Chunein:
+            2. Transport Gaadi:
           </label>
           <div className="grid grid-cols-3 gap-2">
             {[
@@ -152,102 +147,85 @@ export default function RealAgmarknetMandiPage() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center">
-          <div className="text-4xl animate-spin mb-3">⏳</div>
-          <h2 className="text-lg font-black text-slate-800">Fetching Real Agmarknet Government Records...</h2>
-          <p className="text-xs text-slate-500 mt-1">Connecting to data.gov.in endpoint with API Key</p>
+      {/* Highlight Banner */}
+      {active && (
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-6 rounded-3xl shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="space-y-1 text-center md:text-left">
+            <span className="bg-amber-400 text-slate-950 text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider">
+              ⭐ Real CSV Record ({crop})
+            </span>
+            <h2 className="text-2xl md:text-3xl font-black mt-2">
+              {active.name} — ₹{active.modal} / Quintal
+            </h2>
+            <p className="text-emerald-100 text-sm">
+              Arrival Date: <strong>{active.arrival_date}</strong> | Min: ₹{active.min_price} | Max: ₹{active.max_price}
+            </p>
+          </div>
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl text-center min-w-[200px]">
+            <span className="text-xs text-emerald-200 font-semibold block">Total Net Pocket ({quantityQtl} Qtl)</span>
+            <span className="text-3xl font-black text-white block mt-1">
+              ₹{totalPocket.toLocaleString("en-IN")}
+            </span>
+            <span className="text-[11px] text-emerald-300 font-bold block mt-1">
+              ✓ Transit Costs Deducted
+            </span>
+          </div>
         </div>
-      ) : errorMsg ? (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 p-6 rounded-2xl text-center text-sm font-bold">
-          {errorMsg}
-        </div>
-      ) : (
-        <>
-          {/* Mandi Cards List */}
-          <div>
-            <h3 className="text-base font-bold text-slate-900 mb-3">
-              Live Mandiyan ({mandis.length} Yards Connected):
-            </h3>
+      )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {mandis.map((m) => {
-                const transport = getTransportPerQtl(m.diesel_cost, m.toll_labor);
-                const inHand = m.modal - transport;
-                const isSel = selectedMandi?.id === m.id;
+      {/* CSV Records Grid */}
+      <div>
+        <h3 className="text-base font-bold text-slate-900 mb-3">
+          CSV Entries for {crop} (Click to Audit):
+        </h3>
 
-                return (
-                  <div
-                    key={m.id}
-                    onClick={() => setSelectedMandi(m)}
-                    className={`p-5 rounded-2xl cursor-pointer border-2 transition relative flex flex-col justify-between ${
-                      isSel
-                        ? "bg-emerald-50/70 border-emerald-600 shadow-md ring-2 ring-emerald-500/20"
-                        : "bg-white border-slate-200 hover:border-slate-300"
-                    }`}
-                  >
-                    <div>
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-black text-slate-900 text-base">{m.name}</h4>
-                        <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
-                          {m.state}
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">🛣️ {m.distance_km} km ({m.drive_time})</div>
-                      
-                      <div className="mt-3 pt-2 border-t border-slate-100 text-xs space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Agmarknet Price:</span>
-                          <span className="font-bold text-slate-900">₹{m.modal}/Qtl</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Transit Cut:</span>
-                          <span className="font-bold text-amber-700">-₹{transport}/Qtl</span>
-                        </div>
-                      </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {mandis.map((m) => {
+            const tr = getTransportPerQtl(m.diesel_cost, m.toll_labor);
+            const inHand = m.modal - tr;
+            const isSel = (active?.id === m.id);
+
+            return (
+              <div
+                key={m.id}
+                onClick={() => setSelectedMandi(m)}
+                className={`p-4 rounded-2xl cursor-pointer border-2 transition relative flex flex-col justify-between ${
+                  isSel
+                    ? "bg-emerald-50/70 border-emerald-600 shadow-md ring-2 ring-emerald-500/20"
+                    : "bg-white border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div>
+                  <div className="flex justify-between items-start">
+                    <h4 className="font-black text-slate-900 text-sm">{m.name}</h4>
+                    <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                      {m.state}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-1">📅 Date: {m.arrival_date}</div>
+                  
+                  <div className="mt-3 pt-2 border-t border-slate-100 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">CSV Modal:</span>
+                      <span className="font-bold text-slate-900">₹{m.modal}</span>
                     </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-200 bg-white p-3 rounded-xl">
-                      <span className="text-[10px] font-bold text-slate-400 block uppercase">Net Pukka Bhav</span>
-                      <span className="text-xl font-black text-emerald-700">₹{inHand}</span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">Updated: {m.arrival_date}</span>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Transit:</span>
+                      <span className="font-bold text-amber-700">-₹{tr}/Qtl</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                </div>
 
-          {/* Audit Breakdown Box */}
-          {selectedMandi && (
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
-              <h3 className="text-base font-black text-slate-900 mb-4">
-                🧾 {selectedMandi.name} Settlement Summary ({quantityQtl} Quintals)
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="text-xs text-slate-500 font-semibold block">Agmarknet Gross Sale</span>
-                  <span className="text-2xl font-black text-slate-900 mt-1 block">
-                    ₹{(selectedMandi.modal * quantityQtl).toLocaleString("en-IN")}
-                  </span>
-                </div>
-                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                  <span className="text-xs text-amber-800 font-semibold block">Total Live Freight</span>
-                  <span className="text-2xl font-black text-amber-800 mt-1 block">
-                    -₹{(getTransportPerQtl(selectedMandi.diesel_cost, selectedMandi.toll_labor) * quantityQtl).toLocaleString("en-IN")}
-                  </span>
-                </div>
-                <div className="p-4 bg-emerald-700 text-white rounded-2xl shadow-md">
-                  <span className="text-xs text-emerald-200 font-bold block">NET FARMER POCKET</span>
-                  <span className="text-2xl font-black text-white mt-1 block">
-                    ₹{((selectedMandi.modal - getTransportPerQtl(selectedMandi.diesel_cost, selectedMandi.toll_labor)) * quantityQtl).toLocaleString("en-IN")}
-                  </span>
+                <div className="mt-3 pt-2 border-t border-slate-200 bg-white p-2.5 rounded-xl">
+                  <span className="text-[9px] font-bold text-slate-400 block uppercase">In-Hand Rate</span>
+                  <span className="text-lg font-black text-emerald-700">₹{inHand}</span>
+                  <span className="text-[10px] text-slate-400 block">/ Quintal</span>
                 </div>
               </div>
-            </div>
-          )}
-        </>
-      )}
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

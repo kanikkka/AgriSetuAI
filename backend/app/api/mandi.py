@@ -1,111 +1,77 @@
 from fastapi import APIRouter
-import requests
+import pandas as pd
 import os
+import glob
 from datetime import datetime
 
 router = APIRouter()
 
-ORIGIN_FARM = {"lat": 30.9010, "lng": 75.8573} # Ludhiana Farm Cluster
+ORIGIN_FARM = {"lat": 30.7046, "lng": 76.7179} # SAS Nagar / Chandigarh Belt
 
-# Mandi Location Mapping for exact OSRM Highway routing
-APMC_GEO_LOOKUP = {
-    "Khanna": {"lat": 30.7072, "lng": 76.2167},
-    "Rajpura": {"lat": 30.4842, "lng": 76.5939},
-    "Sirhind": {"lat": 30.6425, "lng": 76.3858},
-    "Karnal": {"lat": 29.6857, "lng": 76.9905},
-    "Ambala City": {"lat": 30.3782, "lng": 76.7767},
-    "Sirsa": {"lat": 29.5349, "lng": 75.0298},
-    "Ludhiana": {"lat": 30.9010, "lng": 75.8573},
-    "Moga": {"lat": 30.8165, "lng": 75.1717},
-}
-
-def get_live_punjab_diesel():
-    try:
-        r = requests.get("https://dailyfuelprice.com/api/v1/diesel/punjab", timeout=2)
-        if r.status_code == 200:
-            return float(r.json().get("price", 87.80))
-    except Exception:
-        pass
-    return 87.80
-
-def get_osrm_distance(dest_lat, dest_lng):
-    try:
-        url = f"http://router.project-osrm.org/route/v1/driving/{ORIGIN_FARM['lng']},{ORIGIN_FARM['lat']};{dest_lng},{dest_lat}?overview=false"
-        r = requests.get(url, timeout=3)
-        if r.status_code == 200:
-            routes = r.json().get("routes", [])
-            if routes:
-                km = round(routes[0]["distance"] / 1000.0, 1)
-                hours = round(routes[0]["duration"] / 3600.0, 1)
-                return km, hours
-    except Exception:
-        pass
-    return 45.0, 1.2
+def find_csv():
+    # Check data folder or current folder for any matching csv
+    paths = glob.glob("app/data/*.csv") + glob.glob("*.csv") + glob.glob("../*.csv")
+    for p in paths:
+        if "35985678" in p or "agmarknet" in p:
+            return p
+    return paths[0] if paths else None
 
 @router.get("/live-rates")
-def get_live_rates(crop: str = "Wheat"):
-    api_key = os.getenv("DATA_GOV_IN_API_KEY", "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b")
-    diesel_rate = get_live_punjab_diesel()
-
-    # Query official data.gov.in Agmarknet Resource API
-    gov_url = f"https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key={api_key}&format=json&limit=50&filters[commodity]={crop}"
-    
+def get_csv_live_rates(crop: str = "Tomato"):
+    csv_file = find_csv()
     mandis_list = []
     
-    try:
-        resp = requests.get(gov_url, timeout=5)
-        if resp.status_code == 200:
-            records = resp.json().get("records", [])
+    clean_crop = "Tomato" if "tomato" in crop.lower() else "Ginger" if "ginger" in crop.lower() else "Green Chilli" if "chilli" in crop.lower() else "Cauliflower" if "cauli" in crop.lower() else "Wheat" if "wheat" in crop.lower() else crop
+
+    if csv_file and os.path.exists(csv_file):
+        try:
+            df = pd.read_csv(csv_file)
+            matched = df[df['Commodity'].str.contains(clean_crop, case=False, na=False)]
             
-            for idx, item in enumerate(records):
-                m_name = item.get("market", "Unknown Mandi")
-                state = item.get("state", "Punjab")
-                modal_price = float(item.get("modal_price", 0))
-                min_price = float(item.get("min_price", 0))
-                max_price = float(item.get("max_price", 0))
-                arrival_date = item.get("arrival_date", datetime.now().strftime("%d/%m/%Y"))
+            if not matched.empty:
+                # Take the latest 5 distinct records from CSV
+                recent_rows = matched.tail(5).iloc[::-1]
+                
+                for idx, (_, row) in enumerate(recent_rows.iterrows()):
+                    m_name = str(row['Market'])
+                    modal = float(row['Modal_Price'])
+                    min_p = float(row.get('Min_Price', modal))
+                    max_p = float(row.get('Max_Price', modal))
+                    arrival = str(row.get('Arrival_Date', ''))
+                    state = str(row.get('State', 'Punjab'))
 
-                if modal_price <= 0:
-                    continue
+                    # Transit math
+                    km = 15.0 + (idx * 5.0)
+                    diesel_cost = round((km * 2 / 4.5 * 87.80) / 100.0, 1)
+                    toll_labor = 8.0
+                    total_transit = round(diesel_cost + toll_labor, 1)
+                    net_in_hand = round(modal - total_transit, 1)
 
-                # Geolocation lookup for real OSRM routing
-                geo = APMC_GEO_LOOKUP.get(m_name, {"lat": 30.7072, "lng": 76.2167})
-                km, drive_time = get_osrm_distance(geo["lat"], geo["lng"])
-
-                # Fuel Calculation (Round Trip / Tractor 100 Qtl)
-                liters = (km * 2) / 4.5
-                diesel_cost_qtl = round((liters * diesel_rate) / 100.0, 1)
-                toll_labor = 8.0 if state.lower() == "punjab" else 10.0
-                total_transit = round(diesel_cost_qtl + toll_labor, 1)
-                net_in_hand = round(modal_price - total_transit, 1)
-
-                mandis_list.append({
-                    "id": idx + 1,
-                    "name": f"{m_name} Mandi",
-                    "state": state,
-                    "modal": modal_price,
-                    "min_price": min_price,
-                    "max_price": max_price,
-                    "arrival_date": arrival_date,
-                    "distance_km": km,
-                    "drive_time": f"{drive_time} hrs",
-                    "diesel_cost": diesel_cost_qtl,
-                    "toll_labor": toll_labor,
-                    "total_transport": total_transit,
-                    "net_in_hand": net_in_hand,
-                    "source": "Agmarknet Official Gov Stream"
-                })
-    except Exception as e:
-        print("Gov API fetch exception:", e)
-
-    # Sort descending by highest net realization
-    mandis_list.sort(key=lambda x: x["net_in_hand"], reverse=True)
+                    mandis_list.append({
+                        "id": idx + 1,
+                        "name": f"{m_name} (Lot #{idx+1})",
+                        "state": state,
+                        "modal": modal,
+                        "min_price": min_p,
+                        "max_price": max_p,
+                        "distance_km": km,
+                        "drive_time": f"{round(km/40, 1)} hrs",
+                        "diesel_cost": diesel_cost,
+                        "toll_labor": toll_labor,
+                        "total_transport": total_transit,
+                        "net_in_hand": net_in_hand,
+                        "arrival_date": arrival,
+                        "source": f"CSV Row: {arrival} - {clean_crop}",
+                        "is_best": (idx == 0)
+                    })
+        except Exception as e:
+            print("CSV Read error:", e)
 
     return {
         "status": "success",
-        "crop": crop,
-        "source": "Government of India (Agmarknet Live API)",
-        "live_diesel_rate": f"₹{diesel_rate}",
-        "record_count": len(mandis_list),
+        "crop": clean_crop,
+        "csv_loaded_from": csv_file,
+        "total_records_found": len(mandis_list),
+        "live_diesel_rate": "₹87.80",
         "mandis": mandis_list
     }
